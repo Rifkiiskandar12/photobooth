@@ -126,6 +126,7 @@ export default function PhotoInput() {
 /* ── Camera Capture ─────────────────────── */
 function CameraCapture({ onCapture, onBack }: { onCapture: (src: string) => void; onBack: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,23 +134,29 @@ function CameraCapture({ onCapture, onBack }: { onCapture: (src: string) => void
 
   const startCamera = useCallback(async (facing: "user" | "environment") => {
     try {
-      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
       const s = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 960 } },
       });
+      streamRef.current = s;
       setStream(s);
       if (videoRef.current) videoRef.current.srcObject = s;
       setError(null);
     } catch {
       setError("Camera unavailable. Please allow camera access or upload photos instead.");
     }
-  }, [stream]);
+  }, []);
 
   useEffect(() => {
     startCamera(facingMode);
-    return () => { stream?.getTracks().forEach((t) => t.stop()); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, [facingMode, startCamera]);
 
   const capture = () => {
     setCountdown(3);
