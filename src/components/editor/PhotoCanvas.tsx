@@ -65,12 +65,13 @@ export default function PhotoCanvas() {
         {/* Caption */}
         {state.captionText && (
           <p
-            className="px-2 pb-1 truncate transition-all duration-200"
+            className="absolute left-0 right-0 px-4 transition-all duration-200 select-none pointer-events-none"
             style={{
+              bottom: `${Math.max(4, state.borderThickness / 2 - state.captionSize / 2)}px`,
               fontFamily: `'${state.captionFont}', sans-serif`,
               fontSize: `${state.captionSize}px`,
               textAlign: state.captionAlign,
-              color: getContrastColor(state.frameColor),
+              color: getContrastColor(state.bgType === "gradient" ? state.bgGradient[1] : state.frameColor),
             }}
           >
             {state.captionText}

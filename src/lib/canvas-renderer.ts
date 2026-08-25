@@ -16,46 +16,37 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
   canvas.height = canvasH;
   const ctx = canvas.getContext("2d")!;
 
-  // Background
+  // Scale factor to translate from preview (280px or 238px wide) to high-res canvas (1200px wide)
+  const previewW = 280 * (layout.aspect < 0.6 ? 0.85 : 1);
+  const scale = canvasW / previewW;
+
+  // Scale dimensions
+  const border = state.borderThickness * scale;
+  const innerW = canvasW - border * 2;
+  const innerH = canvasH - border * 2;
+  const radius = state.cornerRadius * scale;
+  const spacing = state.innerSpacing * scale;
+
+  // Frame shape (with Solid Color or Gradient background)
   if (state.bgType === "gradient") {
     const grad = ctx.createLinearGradient(0, 0, 0, canvasH);
     grad.addColorStop(0, state.bgGradient[0]);
     grad.addColorStop(1, state.bgGradient[1]);
     ctx.fillStyle = grad;
   } else {
-    ctx.fillStyle = state.bgColor;
+    ctx.fillStyle = state.frameColor;
   }
-  ctx.fillRect(0, 0, canvasW, canvasH);
-
-  // Frame
-  const border = state.borderThickness;
-  const innerW = canvasW - border * 2;
-  const innerH = canvasH - border * 2;
-  const radius = state.cornerRadius;
-
-  ctx.fillStyle = state.frameColor;
   roundRect(ctx, 0, 0, canvasW, canvasH, radius);
   ctx.fill();
 
-  // Frame inner bg
-  if (state.bgType === "gradient") {
-    const grad = ctx.createLinearGradient(border, border, border, border + innerH);
-    grad.addColorStop(0, state.bgGradient[0]);
-    grad.addColorStop(1, state.bgGradient[1]);
-    ctx.fillStyle = grad;
-  } else {
-    ctx.fillStyle = state.frameColor;
-  }
-
   // Film strip holes
   if (layout.hasFilmHoles) {
-    drawFilmHoles(ctx, canvasW, canvasH, state.frameColor);
+    drawFilmHoles(ctx, canvasW, canvasH, state.bgType === "gradient" ? state.bgGradient[0] : state.frameColor, scale);
   }
 
   // Draw photos in slots
-  const gap = state.photoGap / innerW;
+  const gap = state.photoGap / 300;
   const slots = layout.slots(gap);
-  const spacing = state.innerSpacing;
 
   const loadedImages = await Promise.all(
     state.photos.slice(0, layout.photoCount).map((p) => loadImage(p.src))
@@ -73,14 +64,14 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
 
     // Slot background
     ctx.fillStyle = "#e0e0e0";
-    roundRect(ctx, sx, sy, sw, sh, Math.max(0, radius - 4));
+    roundRect(ctx, sx, sy, sw, sh, Math.max(0, radius - (4 * scale)));
     ctx.fill();
 
     if (img && photo) {
       ctx.save();
       // Clip to slot
       ctx.beginPath();
-      roundRect(ctx, sx, sy, sw, sh, Math.max(0, radius - 4));
+      roundRect(ctx, sx, sy, sw, sh, Math.max(0, radius - (4 * scale)));
       ctx.clip();
 
       // Apply filter
@@ -126,12 +117,18 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
 
   // Caption
   if (state.captionText) {
-    const fontSize = Math.round(state.captionSize * (canvasW / 400));
+    const fontSize = state.captionSize * scale;
     ctx.font = `${fontSize}px '${state.captionFont}', sans-serif`;
-    ctx.fillStyle = getContrastColor(state.frameColor);
+    ctx.fillStyle = getContrastColor(state.bgType === "gradient" ? state.bgGradient[1] : state.frameColor);
     ctx.textAlign = state.captionAlign as CanvasTextAlign;
-    const textX = state.captionAlign === "left" ? border + spacing : state.captionAlign === "right" ? canvasW - border - spacing : canvasW / 2;
-    const textY = canvasH - border / 2 + fontSize / 3;
+    
+    const textX = state.captionAlign === "left" 
+      ? border + spacing 
+      : state.captionAlign === "right" 
+        ? canvasW - border - spacing 
+        : canvasW / 2;
+        
+    const textY = canvasH - (border / 2) + (fontSize / 3);
     ctx.fillText(state.captionText, textX, textY);
   }
 
@@ -173,35 +170,45 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-function drawFilmHoles(ctx: CanvasRenderingContext2D, w: number, h: number, color: string) {
-  const holeR = 6;
-  const gap = 24;
+function drawFilmHoles(ctx: CanvasRenderingContext2D, w: number, h: number, color: string, scale: number) {
+  const holeR = 1.5 * scale;
+  const gap = 20 * scale;
   const count = Math.floor(h / gap);
   ctx.fillStyle = darkenColor(color, 30);
   for (let i = 0; i < count; i++) {
     const y = gap / 2 + i * gap;
     // Left holes
     ctx.beginPath();
-    ctx.arc(12, y, holeR, 0, Math.PI * 2);
+    ctx.arc(4 * scale, y, holeR, 0, Math.PI * 2);
     ctx.fill();
     // Right holes
     ctx.beginPath();
-    ctx.arc(w - 12, y, holeR, 0, Math.PI * 2);
+    ctx.arc(w - (4 * scale), y, holeR, 0, Math.PI * 2);
     ctx.fill();
   }
 }
 
+function normalizeHex(hex: string): string {
+  let clean = hex.replace("#", "");
+  if (clean.length === 3) {
+    clean = clean.split("").map((c) => c + c).join("");
+  }
+  return `#${clean}`;
+}
+
 function getContrastColor(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
+  const norm = normalizeHex(hex);
+  const r = parseInt(norm.slice(1, 3), 16);
+  const g = parseInt(norm.slice(3, 5), 16);
+  const b = parseInt(norm.slice(5, 7), 16);
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return lum > 0.5 ? "#171717" : "#FAFAF7";
 }
 
 function darkenColor(hex: string, amount: number): string {
-  const r = Math.max(0, parseInt(hex.slice(1, 3), 16) - amount);
-  const g = Math.max(0, parseInt(hex.slice(3, 5), 16) - amount);
-  const b = Math.max(0, parseInt(hex.slice(5, 7), 16) - amount);
+  const norm = normalizeHex(hex);
+  const r = Math.max(0, parseInt(norm.slice(1, 3), 16) - amount);
+  const g = Math.max(0, parseInt(norm.slice(3, 5), 16) - amount);
+  const b = Math.max(0, parseInt(norm.slice(5, 7), 16) - amount);
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
