@@ -121,6 +121,7 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
     ctx.font = `${fontSize}px '${state.captionFont}', sans-serif`;
     ctx.fillStyle = getContrastColor(state.bgType === "gradient" ? state.bgGradient[1] : state.frameColor);
     ctx.textAlign = state.captionAlign as CanvasTextAlign;
+    ctx.textBaseline = "middle";
     
     const textX = state.captionAlign === "left" 
       ? border + spacing 
@@ -128,7 +129,8 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
         ? canvasW - border - spacing 
         : canvasW / 2;
         
-    const textY = canvasH - (border / 2) + (fontSize / 3);
+    const isPolaroid = state.layout === "polaroid";
+    const textY = isPolaroid ? canvasH - (border * 0.9) : canvasH - (border / 2);
     ctx.fillText(state.captionText, textX, textY);
   }
 
