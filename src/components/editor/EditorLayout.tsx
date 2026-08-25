@@ -43,8 +43,7 @@ export default function EditorLayout() {
           </Link>
           <div className="w-px h-5 bg-border" />
           <div className="flex items-center gap-1.5">
-            <Camera className="w-4 h-4 text-accent" />
-            <span className="font-[family-name:var(--font-heading)] text-sm font-semibold">Photobooth</span>
+            <span className="font-[family-name:var(--font-heading)] text-sm font-semibold">Abadibooth</span>
           </div>
         </div>
         <button
