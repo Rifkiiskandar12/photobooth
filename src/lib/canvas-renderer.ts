@@ -7,6 +7,9 @@ import { getFilterCSS } from "./filters";
 const BASE_W = 1200;
 
 export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElement> {
+  if (typeof document !== "undefined" && document.fonts) {
+    await document.fonts.ready;
+  }
   const layout = getLayout(state.layout);
   const canvasW = BASE_W;
   const canvasH = Math.round(canvasW / layout.aspect);

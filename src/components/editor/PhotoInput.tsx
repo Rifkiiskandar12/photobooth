@@ -280,16 +280,8 @@ function UploadArea({ onUpload, onBack }: { onUpload: (files: string[]) => void;
     );
     if (valid.length === 0) return;
 
-    Promise.all(
-      valid.map(
-        (f) =>
-          new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.readAsDataURL(f);
-          })
-      )
-    ).then(onUpload);
+    const urls = valid.map((f) => URL.createObjectURL(f));
+    onUpload(urls);
   };
 
   return (
