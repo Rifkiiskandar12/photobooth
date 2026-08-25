@@ -82,8 +82,11 @@ function reducer(state: EditorState, action: Action): EditorState {
     case "ADD_PHOTO":
       if (state.photos.length >= 6) return state;
       return { ...state, photos: [...state.photos, action.photo] };
-    case "REMOVE_PHOTO":
+    case "REMOVE_PHOTO": {
+      const pToRemove = state.photos.find(p => p.id === action.id);
+      if (pToRemove && pToRemove.src.startsWith("blob:")) URL.revokeObjectURL(pToRemove.src);
       return { ...state, photos: state.photos.filter((p) => p.id !== action.id) };
+    }
     case "UPDATE_PHOTO":
       return { ...state, photos: state.photos.map((p) => p.id === action.id ? { ...p, ...action.updates } : p) };
     case "SET_LAYOUT": return { ...state, layout: action.layout };
@@ -100,7 +103,10 @@ function reducer(state: EditorState, action: Action): EditorState {
     case "SET_CAPTION_FONT": return { ...state, captionFont: action.font };
     case "SET_CAPTION_SIZE": return { ...state, captionSize: action.size };
     case "SET_CAPTION_ALIGN": return { ...state, captionAlign: action.align };
-    case "RESET": return initialState;
+    case "RESET": {
+      state.photos.forEach(p => { if (p.src.startsWith("blob:")) URL.revokeObjectURL(p.src) });
+      return initialState;
+    }
     default: return state;
   }
 }
