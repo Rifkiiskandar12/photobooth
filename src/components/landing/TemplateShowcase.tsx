@@ -8,7 +8,7 @@ const TEMPLATES = [
     name: "Classic Strip",
     desc: "4 photos in a vertical strip",
     colors: ["#fde2e4", "#fad2cf", "#f7c5c0", "#e8b4b8"],
-    layout: "strip",
+    layout: "classic",
     bg: "#FFFFFF",
   },
   {
@@ -43,7 +43,7 @@ const TEMPLATES = [
     name: "Minimal",
     desc: "Clean black & white",
     colors: ["#e0e0e0", "#d0d0d0", "#c0c0c0", "#b0b0b0"],
-    layout: "strip",
+    layout: "classic",
     bg: "#000000",
   },
 ];
@@ -57,7 +57,7 @@ function TemplateCard({ t, i }: { t: (typeof TEMPLATES)[0]; i: number }) {
       transition={{ duration: 0.5, delay: i * 0.08 }}
       className="group cursor-pointer"
     >
-      <Link href="/editor">
+      <Link href={`/editor?layout=${t.layout}&bg=${encodeURIComponent(t.bg)}`}>
         <div className="relative rounded-2xl overflow-hidden border border-border hover:border-accent/50 transition-all duration-300 hover:shadow-lg hover:-translate-y-1.5">
           {/* Preview */}
           <div
@@ -68,7 +68,7 @@ function TemplateCard({ t, i }: { t: (typeof TEMPLATES)[0]; i: number }) {
               className="rounded-xl p-2.5 transition-transform duration-500 group-hover:scale-[1.03]"
               style={{ backgroundColor: t.bg }}
             >
-              {t.layout === "strip" && (
+              {t.layout === "classic" && (
                 <div className="w-[80px] flex flex-col gap-1.5">
                   {t.colors.map((c, j) => (
                     <div key={j} className="w-full aspect-[4/3] rounded-md" style={{ backgroundColor: c }} />
