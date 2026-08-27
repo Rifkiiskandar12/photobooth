@@ -63,28 +63,38 @@ export default function PhotoCanvas() {
         </div>
 
         {/* Caption */}
-        {state.captionText && (
-          <div
-            className="absolute left-0 right-0 flex items-center justify-center pointer-events-none select-none"
-            style={{
-              bottom: state.layout === "polaroid" ? `${state.borderThickness * 0.5}px` : "0px",
-              height: `${state.borderThickness}px`,
-            }}
-          >
-            <p
-              className="px-4 truncate transition-all duration-200"
+        {state.captionText && (() => {
+          const minTextHeight = 28;
+          const isPolaroid = state.layout === "polaroid";
+          const textAreaHeight = Math.max(state.borderThickness, minTextHeight);
+          // For polaroid: position text in the bottom border area, centered vertically
+          // For others: position at the very bottom of the frame
+          const bottomOffset = isPolaroid
+            ? Math.max(state.borderThickness * 0.3, 16)
+            : Math.max((state.borderThickness - textAreaHeight) / 2, 8);
+          return (
+            <div
+              className="absolute left-0 right-0 flex items-center justify-center pointer-events-none select-none"
               style={{
-                fontFamily: `'${state.captionFont}', sans-serif`,
-                fontSize: `${state.captionSize}px`,
-                textAlign: state.captionAlign,
-                color: getContrastColor(state.bgType === "gradient" ? state.bgGradient[1] : state.frameColor),
-                width: "100%",
+                bottom: `${bottomOffset}px`,
+                height: `${textAreaHeight}px`,
               }}
             >
-              {state.captionText}
-            </p>
-          </div>
-        )}
+              <p
+                className="px-4 truncate transition-all duration-200"
+                style={{
+                  fontFamily: `'${state.captionFont}', sans-serif`,
+                  fontSize: `${state.captionSize}px`,
+                  textAlign: state.captionAlign,
+                  color: getContrastColor(state.bgType === "gradient" ? state.bgGradient[1] : state.frameColor),
+                  width: "100%",
+                }}
+              >
+                {state.captionText}
+              </p>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

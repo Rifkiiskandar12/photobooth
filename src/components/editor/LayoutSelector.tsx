@@ -44,12 +44,18 @@ export default function LayoutSelector() {
   const layouts = getAllLayouts();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const currentLayout = layouts.find(l => l.name === state.layout) || layouts[0];
+  const maxPhotos = currentLayout.photoCount;
+
   const handleAddPhotos = (files: FileList | null) => {
     if (!files) return;
     const valid = Array.from(files).filter((f) =>
       ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(f.type)
     );
-    const remaining = 6 - state.photos.length;
+    const activePhotosCount = Math.min(state.photos.length, maxPhotos);
+    const remaining = maxPhotos - activePhotosCount;
+    if (remaining <= 0) return;
+    
     Promise.all(
       valid.slice(0, remaining).map(
         (f) => new Promise<string>((resolve) => {
@@ -89,10 +95,10 @@ export default function LayoutSelector() {
       {/* Photo management */}
       <div>
         <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-3">
-          Photos ({state.photos.length}/6)
+          Photos ({Math.min(state.photos.length, maxPhotos)}/{maxPhotos})
         </h3>
         <div className="grid grid-cols-3 gap-2">
-          {state.photos.map((p) => (
+          {state.photos.slice(0, maxPhotos).map((p) => (
             <div key={p.id} className="relative group aspect-square rounded-lg overflow-hidden border border-border">
               <img src={p.src} alt="" className="w-full h-full object-cover" />
               <button
@@ -103,7 +109,7 @@ export default function LayoutSelector() {
               </button>
             </div>
           ))}
-          {state.photos.length < 6 && (
+          {state.photos.length < maxPhotos && (
             <button
               onClick={() => inputRef.current?.click()}
               className="aspect-square rounded-lg border-2 border-dashed border-border hover:border-accent flex items-center justify-center text-muted hover:text-accent transition-colors"
