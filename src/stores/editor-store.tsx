@@ -116,8 +116,12 @@ const EditorContext = createContext<{
   dispatch: React.Dispatch<Action>;
 } | null>(null);
 
-export function EditorProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+export function EditorProvider({ children, initialLayout, initialBg }: { children: ReactNode; initialLayout?: LayoutType; initialBg?: string }) {
+  const [state, dispatch] = useReducer(reducer, {
+    ...initialState,
+    ...(initialLayout ? { layout: initialLayout } : {}),
+    ...(initialBg ? { bgColor: initialBg, frameColor: initialBg } : {}),
+  });
   return (
     <EditorContext.Provider value={{ state, dispatch }}>
       {children}

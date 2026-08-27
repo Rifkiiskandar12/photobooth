@@ -133,7 +133,17 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
         : canvasW / 2;
         
     const isPolaroid = state.layout === "polaroid";
-    const textY = isPolaroid ? canvasH - (border * 0.9) : canvasH - (border / 2);
+    const minTextHeight = 28 * scale;
+    const textAreaHeight = Math.max(border, minTextHeight);
+    
+    let bottomOffset;
+    if (isPolaroid) {
+      bottomOffset = Math.max(border * 0.3, 16 * scale);
+    } else {
+      bottomOffset = Math.max((border - textAreaHeight) / 2, 8 * scale);
+    }
+    
+    const textY = canvasH - (bottomOffset + textAreaHeight / 2);
     ctx.fillText(state.captionText, textX, textY);
   }
 
