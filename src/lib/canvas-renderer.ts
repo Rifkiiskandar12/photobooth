@@ -1,4 +1,4 @@
-import { EditorState, PhotoItem } from "@/stores/editor-store";
+import { EditorState } from "@/stores/editor-store";
 import { getLayout } from "./layouts";
 import { getFilterCSS } from "./filters";
 
@@ -145,6 +145,33 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
     
     const textY = canvasH - (bottomOffset + textAreaHeight / 2);
     ctx.fillText(state.captionText, textX, textY);
+  }
+
+  // Draw stickers
+  if (state.stickers && state.stickers.length > 0) {
+    const loadedStickers = await Promise.all(
+      state.stickers.map((s) => loadImage(s.src).catch(() => null)) // Ignore failed stickers
+    );
+
+    const stickerSize = 80 * scale; // w-20 h-20 in CSS = 80px
+
+    for (let i = 0; i < state.stickers.length; i++) {
+      const sticker = state.stickers[i];
+      const img = loadedStickers[i];
+      if (!img) continue;
+
+      const cx = border + sticker.x * innerW;
+      const cy = border + sticker.y * innerH;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      // Currently no rotation in UI, but if added later, we can support it here:
+      if (sticker.rotation) {
+        ctx.rotate((sticker.rotation * Math.PI) / 180);
+      }
+      ctx.drawImage(img, -stickerSize / 2, -stickerSize / 2, stickerSize, stickerSize);
+      ctx.restore();
+    }
   }
 
   return canvas;

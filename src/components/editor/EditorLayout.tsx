@@ -10,9 +10,10 @@ import LayoutSelector from "./LayoutSelector";
 import FrameCustomizer from "./FrameCustomizer";
 import FilterPanel from "./FilterPanel";
 import TextEditor from "./TextEditor";
+import StickerSelector from "./StickerSelector";
 import PreviewModal from "./PreviewModal";
 
-type Tab = "layout" | "frame" | "filter" | "text";
+type Tab = "layout" | "frame" | "filter" | "text" | "sticker";
 
 export default function EditorLayout() {
   const { state } = useEditor();
@@ -30,6 +31,7 @@ export default function EditorLayout() {
     { key: "frame", label: "Frame" },
     { key: "filter", label: "Filter" },
     { key: "text", label: "Text" },
+    { key: "sticker", label: "Stickers" },
   ];
 
   return (
@@ -87,6 +89,7 @@ export default function EditorLayout() {
             {tab === "frame" && <FrameCustomizer />}
             {tab === "filter" && <FilterPanel />}
             {tab === "text" && <TextEditor />}
+            {tab === "sticker" && <StickerSelector />}
           </div>
         </div>
       </div>
