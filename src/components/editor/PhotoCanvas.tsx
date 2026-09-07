@@ -3,12 +3,15 @@
 import { useEditor } from "@/stores/editor-store";
 import { getLayout, SlotRect } from "@/lib/layouts";
 import { getFilterCSS } from "@/lib/filters";
+import { motion, PanInfo, useMotionValue } from "framer-motion";
+import { useRef } from "react";
 
 export default function PhotoCanvas() {
   const { state } = useEditor();
   const layout = getLayout(state.layout);
   const gap = state.photoGap / 300;
   const slots = layout.slots(gap);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const bgStyle =
     state.bgType === "gradient"
@@ -60,6 +63,13 @@ export default function PhotoCanvas() {
               cornerRadius={Math.max(0, state.cornerRadius - 4)}
             />
           ))}
+
+          {/* Stickers */}
+          <div ref={containerRef} className="absolute inset-0 z-20 pointer-events-none">
+            {state.stickers.map((sticker) => (
+              <DraggableSticker key={sticker.id} sticker={sticker} containerRef={containerRef} />
+            ))}
+          </div>
         </div>
 
         {/* Caption */}
@@ -137,16 +147,19 @@ function PhotoSlot({
       }}
     >
       {photo ? (
-        <img
-          src={photo.src}
-          alt=""
-          className="w-full h-full object-cover transition-all duration-200"
-          style={{
-            filter: fullFilter,
-            transform: `scale(${photo.zoom}) translate(${photo.cropX * 100}%, ${photo.cropY * 100}%) rotate(${photo.rotation}deg)`,
-          }}
-          draggable={false}
-        />
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={photo.src}
+            alt=""
+            className="w-full h-full object-cover transition-all duration-200"
+            style={{
+              filter: fullFilter,
+              transform: `scale(${photo.zoom}) translate(${photo.cropX * 100}%, ${photo.cropY * 100}%) rotate(${photo.rotation}deg)`,
+            }}
+            draggable={false}
+          />
+        </>
       ) : (
         <div className="w-full h-full flex items-center justify-center text-muted/40">
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -167,4 +180,67 @@ function getContrastColor(hex: string): string {
   } catch {
     return "#171717";
   }
+}
+
+function DraggableSticker({ sticker, containerRef }: { sticker: import("@/stores/editor-store").StickerItem; containerRef: React.RefObject<HTMLDivElement | null> }) {
+  const { dispatch } = useEditor();
+  const x = useMotionValue("-50%");
+  const y = useMotionValue("-50%");
+
+  const handleDragEnd = (e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    
+    const dx = info.offset.x / rect.width;
+    const dy = info.offset.y / rect.height;
+    
+    dispatch({
+      type: "UPDATE_STICKER",
+      id: sticker.id,
+      updates: {
+        x: Math.max(0, Math.min(1, sticker.x + dx)),
+        y: Math.max(0, Math.min(1, sticker.y + dy)),
+      },
+    });
+
+    // Reset motion values instantly so the drag offset doesn't compound with the new state position
+    x.set("-50%");
+    y.set("-50%");
+  };
+
+  const handleRemove = () => {
+    dispatch({ type: "REMOVE_STICKER", id: sticker.id });
+  };
+
+  return (
+    <motion.div
+      drag
+      dragMomentum={false}
+      onDragEnd={handleDragEnd}
+      style={{
+        position: "absolute",
+        left: `${sticker.x * 100}%`,
+        top: `${sticker.y * 100}%`,
+        x,
+        y,
+        cursor: "grab",
+      }}
+      whileDrag={{ cursor: "grabbing", scale: 1.05 }}
+      className="pointer-events-auto group w-20 h-20"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={sticker.src}
+        alt="sticker"
+        className="w-full h-full object-contain drop-shadow-md pointer-events-none max-w-none"
+        draggable={false}
+      />
+      <button 
+        onClick={handleRemove}
+        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs shadow-sm z-30"
+      >
+        ×
+      </button>
+    </motion.div>
+  );
 }

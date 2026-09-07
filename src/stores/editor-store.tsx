@@ -19,6 +19,16 @@ export interface PhotoItem {
 export type LayoutType = "classic" | "grid" | "polaroid" | "film" | "editorial";
 export type BgType = "solid" | "gradient";
 
+export interface StickerItem {
+  id: string;
+  src: string;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+}
+
+
 export interface EditorState {
   photos: PhotoItem[];
   layout: LayoutType;
@@ -35,6 +45,7 @@ export interface EditorState {
   captionFont: string;
   captionSize: number;
   captionAlign: "left" | "center" | "right";
+  stickers: StickerItem[];
 }
 
 type Action =
@@ -56,6 +67,9 @@ type Action =
   | { type: "SET_CAPTION_FONT"; font: string }
   | { type: "SET_CAPTION_SIZE"; size: number }
   | { type: "SET_CAPTION_ALIGN"; align: "left" | "center" | "right" }
+  | { type: "ADD_STICKER"; sticker: StickerItem }
+  | { type: "UPDATE_STICKER"; id: string; updates: Partial<StickerItem> }
+  | { type: "REMOVE_STICKER"; id: string }
   | { type: "RESET" };
 
 const initialState: EditorState = {
@@ -74,6 +88,7 @@ const initialState: EditorState = {
   captionFont: "Inter",
   captionSize: 14,
   captionAlign: "center",
+  stickers: [],
 };
 
 function reducer(state: EditorState, action: Action): EditorState {
@@ -103,6 +118,9 @@ function reducer(state: EditorState, action: Action): EditorState {
     case "SET_CAPTION_FONT": return { ...state, captionFont: action.font };
     case "SET_CAPTION_SIZE": return { ...state, captionSize: action.size };
     case "SET_CAPTION_ALIGN": return { ...state, captionAlign: action.align };
+    case "ADD_STICKER": return { ...state, stickers: [...state.stickers, action.sticker] };
+    case "UPDATE_STICKER": return { ...state, stickers: state.stickers.map((s) => s.id === action.id ? { ...s, ...action.updates } : s) };
+    case "REMOVE_STICKER": return { ...state, stickers: state.stickers.filter((s) => s.id !== action.id) };
     case "RESET": {
       state.photos.forEach(p => { if (p.src.startsWith("blob:")) URL.revokeObjectURL(p.src) });
       return initialState;
