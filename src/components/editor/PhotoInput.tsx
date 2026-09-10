@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera as CameraIcon, Upload, X, ImagePlus, ArrowLeft, Trash2 } from "lucide-react";
+import { Camera as CameraIcon, Upload, X, ImagePlus, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useEditor, createPhoto } from "@/stores/editor-store";
+import { CameraCaptureModal } from "./CameraCaptureModal";
 
 type Mode = "select" | "camera" | "upload";
 
@@ -86,7 +87,9 @@ export default function PhotoInput() {
               {state.photos.length > 0 && (
                 <p className="text-muted text-sm mt-6">
                   {state.photos.length}/6 photos added.{" "}
-                  <button onClick={() => setMode("select")} className="text-accent underline">
+                  <button onClick={() => {
+                    dispatch({ type: "SET_HAS_STARTED_EDITING", value: true });
+                  }} className="text-accent underline">
                     Continue to editor →
                   </button>
                 </p>
@@ -95,12 +98,12 @@ export default function PhotoInput() {
           )}
 
           {mode === "camera" && (
-            <CameraCapture
+            <CameraCaptureModal
               onCapture={(src) => {
                 dispatch({ type: "ADD_PHOTO", photo: createPhoto(src) });
-                setMode("select");
+                dispatch({ type: "SET_HAS_STARTED_EDITING", value: true });
               }}
-              onBack={() => setMode("select")}
+              onClose={() => setMode("select")}
             />
           )}
 
@@ -112,7 +115,7 @@ export default function PhotoInput() {
                 toAdd.forEach((src) => {
                   dispatch({ type: "ADD_PHOTO", photo: createPhoto(src) });
                 });
-                setMode("select");
+                dispatch({ type: "SET_HAS_STARTED_EDITING", value: true });
               }}
               onBack={() => setMode("select")}
             />
@@ -123,150 +126,7 @@ export default function PhotoInput() {
   );
 }
 
-/* ── Camera Capture ─────────────────────── */
-function CameraCapture({ onCapture, onBack }: { onCapture: (src: string) => void; onBack: () => void }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
-  const startCamera = useCallback(async (facing: "user" | "environment") => {
-    try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-      }
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 960 } },
-      });
-      streamRef.current = s;
-      setStream(s);
-      if (videoRef.current) videoRef.current.srcObject = s;
-      setError(null);
-    } catch {
-      setError("Camera unavailable. Please allow camera access or upload photos instead.");
-    }
-  }, []);
-
-  useEffect(() => {
-    startCamera(facingMode);
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-      }
-    };
-  }, [facingMode, startCamera]);
-
-  const capture = () => {
-    setCountdown(3);
-    let c = 3;
-    const interval = setInterval(() => {
-      c--;
-      if (c <= 0) {
-        clearInterval(interval);
-        setCountdown(null);
-        // Capture
-        const video = videoRef.current!;
-        const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext("2d")!;
-        if (facingMode === "user") {
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
-        }
-        ctx.drawImage(video, 0, 0);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-        stream?.getTracks().forEach((t) => t.stop());
-        onCapture(dataUrl);
-      } else {
-        setCountdown(c);
-      }
-    }, 1000);
-  };
-
-  const switchCamera = () => {
-    const next = facingMode === "user" ? "environment" : "user";
-    setFacingMode(next);
-    startCamera(next);
-  };
-
-  if (error) {
-    return (
-      <motion.div
-        key="cam-error"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="text-center max-w-md"
-      >
-        <p className="text-muted mb-6">{error}</p>
-        <div className="flex gap-3 justify-center">
-          <button onClick={onBack} className="px-6 py-2.5 border border-border rounded-full text-sm hover:bg-bg-secondary transition-colors">
-            Upload Photos
-          </button>
-        </div>
-      </motion.div>
-    );
-  }
-
-  return (
-    <motion.div
-      key="camera"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-xl"
-    >
-      <div className="relative rounded-2xl overflow-hidden bg-black aspect-[4/3]">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover"
-          style={{ transform: facingMode === "user" ? "scaleX(-1)" : "none" }}
-        />
-        {/* Countdown */}
-        <AnimatePresence>
-          {countdown !== null && (
-            <motion.div
-              key={countdown}
-              initial={{ scale: 2, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.5, opacity: 0 }}
-              className="absolute inset-0 flex items-center justify-center"
-            >
-              <span className="text-white text-8xl font-[family-name:var(--font-heading)] font-bold drop-shadow-lg">
-                {countdown}
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      <div className="flex items-center justify-center gap-4 mt-6">
-        <button
-          onClick={onBack}
-          className="px-5 py-2.5 text-sm text-muted hover:text-text border border-border rounded-full transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={switchCamera}
-          className="px-5 py-2.5 text-sm border border-border rounded-full hover:bg-bg-secondary transition-colors"
-        >
-          Switch Camera
-        </button>
-        <button
-          onClick={capture}
-          disabled={countdown !== null}
-          className="w-14 h-14 bg-accent rounded-full border-4 border-white shadow-lg hover:scale-105 active:scale-95 transition-transform disabled:opacity-50"
-        />
-      </div>
-    </motion.div>
-  );
-}
 
 /* ── Upload Area ────────────────────────── */
 function UploadArea({ onUpload, onBack }: { onUpload: (files: string[]) => void; onBack: () => void }) {

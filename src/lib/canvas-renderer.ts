@@ -12,25 +12,46 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
   }
   const layout = getLayout(state.layout);
   const canvasW = BASE_W;
-  const canvasH = Math.round(canvasW / layout.aspect);
 
-  const canvas = document.createElement("canvas");
-  canvas.width = canvasW;
-  canvas.height = canvasH;
-  const ctx = canvas.getContext("2d")!;
-
-  // Scale factor to translate from preview (280px or 238px wide) to high-res canvas (1200px wide)
+  // Scale factor to translate from preview width to high-res canvas
   const previewW = 280 * (layout.aspect < 0.6 ? 0.85 : 1);
   const scale = canvasW / previewW;
 
   // Scale dimensions
   const border = state.borderThickness * scale;
-  const innerW = canvasW - border * 2;
-  const innerH = canvasH - border * 2;
   const radius = state.cornerRadius * scale;
   const spacing = state.innerSpacing * scale;
 
-  // Frame shape (with Solid Color or Gradient background)
+  // Inner area width/height — derived from aspect ratio (same math as PhotoCanvas.tsx)
+  const innerW = canvasW - border * 2;
+  const innerH = innerW / layout.aspect;
+
+  // Caption area — only outside polaroid
+  const isPolaroid = state.layout === "polaroid";
+  const captionAreaH = state.captionText && !isPolaroid
+    ? Math.max(border, state.captionSize * scale + 14 * scale)
+    : border;
+
+  // Bleed margin for stickers extending beyond frame
+  const BLEED_PX = 40;
+  const bleed = BLEED_PX * scale;
+
+  const baseCanvasH = innerH + border * 2;
+  const canvasH = Math.round(baseCanvasH + (captionAreaH - border));
+
+  // Export canvas includes bleed on all 4 sides
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasW + bleed * 2;
+  canvas.height = canvasH + bleed * 2;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Offset everything by bleed so frame sits centered
+  ctx.save();
+  ctx.translate(bleed, bleed);
+
+  // Frame background
   if (state.bgType === "gradient") {
     const grad = ctx.createLinearGradient(0, 0, 0, canvasH);
     grad.addColorStop(0, state.bgGradient[0]);
@@ -51,121 +72,101 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
   const gap = state.photoGap / 300;
   const slots = layout.slots(gap);
 
-  const loadedImages = await Promise.all(
-    state.photos.slice(0, layout.photoCount).map((p) => loadImage(p.src))
-  );
-
   for (let i = 0; i < slots.length; i++) {
     const slot = slots[i];
     const photo = state.photos[i];
-    const img = loadedImages[i];
 
     const sx = border + spacing + slot.x * (innerW - spacing * 2);
     const sy = border + spacing + slot.y * (innerH - spacing * 2);
     const sw = slot.w * (innerW - spacing * 2);
     const sh = slot.h * (innerH - spacing * 2);
+    const sr = Math.max(0, radius - 4 * scale);
 
-    // Slot background
-    ctx.fillStyle = "#e0e0e0";
-    roundRect(ctx, sx, sy, sw, sh, Math.max(0, radius - (4 * scale)));
-    ctx.fill();
+    ctx.save();
+    roundRect(ctx, sx, sy, sw, sh, sr);
+    ctx.clip();
 
-    if (img && photo) {
-      ctx.save();
-      // Clip to slot
-      ctx.beginPath();
-      roundRect(ctx, sx, sy, sw, sh, Math.max(0, radius - (4 * scale)));
-      ctx.clip();
-
-      // Apply filter
-      const filterCSS = photo.filter !== "none" ? getFilterCSS(photo.filter) : (state.globalFilter !== "none" ? getFilterCSS(state.globalFilter) : "none");
-      if (filterCSS !== "none") {
-        ctx.filter = filterCSS;
-      }
-
-      // Apply brightness/contrast/saturation
-      const adjustments = [];
-      if (photo.brightness !== 100) adjustments.push(`brightness(${photo.brightness / 100})`);
-      if (photo.contrast !== 100) adjustments.push(`contrast(${photo.contrast / 100})`);
-      if (photo.saturation !== 100) adjustments.push(`saturate(${photo.saturation / 100})`);
-      if (adjustments.length > 0) {
-        ctx.filter = ctx.filter === "none" ? adjustments.join(" ") : ctx.filter + " " + adjustments.join(" ");
-      }
-
-      // Draw image covering slot (object-fit: cover)
-      const zoom = photo.zoom;
+    if (photo) {
+      const img = await loadImage(photo.src);
+      const filterCSS = getFilterCSS(photo.filter || state.globalFilter);
+      ctx.filter = filterCSS === "none" ? "none" : filterCSS;
+      // object-fit: cover
       const imgAspect = img.width / img.height;
       const slotAspect = sw / sh;
       let dw: number, dh: number;
       if (imgAspect > slotAspect) {
-        dh = sh * zoom;
+        dh = sh;
         dw = dh * imgAspect;
       } else {
-        dw = sw * zoom;
+        dw = sw;
         dh = dw / imgAspect;
       }
-      const dx = sx + (sw - dw) / 2 + photo.cropX * sw;
-      const dy = sy + (sh - dh) / 2 + photo.cropY * sh;
-
-      if (photo.rotation !== 0) {
-        ctx.translate(sx + sw / 2, sy + sh / 2);
-        ctx.rotate((photo.rotation * Math.PI) / 180);
-        ctx.translate(-(sx + sw / 2), -(sy + sh / 2));
-      }
-
+      const dx = sx + (sw - dw) / 2;
+      const dy = sy + (sh - dh) / 2;
       ctx.drawImage(img, dx, dy, dw, dh);
-      ctx.restore();
+      ctx.filter = "none";
+    } else {
+      ctx.fillStyle = "#e5e5e5";
+      ctx.fillRect(sx, sy, sw, sh);
     }
+    ctx.restore();
   }
 
-  // Caption
+  // Caption text
   if (state.captionText) {
     const fontSize = state.captionSize * scale;
     ctx.font = `${fontSize}px '${state.captionFont}', sans-serif`;
-    ctx.fillStyle = getContrastColor(state.bgType === "gradient" ? state.bgGradient[1] : state.frameColor);
+
+    if (state.captionColor && state.captionColor !== "auto") {
+      ctx.fillStyle = state.captionColor;
+    } else {
+      ctx.fillStyle = getContrastColor(state.bgType === "gradient" ? state.bgGradient[1] : state.frameColor);
+    }
     ctx.textAlign = state.captionAlign as CanvasTextAlign;
     ctx.textBaseline = "middle";
-    
-    const textX = state.captionAlign === "left" 
-      ? border + spacing 
-      : state.captionAlign === "right" 
-        ? canvasW - border - spacing 
+
+    const textX = state.captionAlign === "left"
+      ? border + spacing
+      : state.captionAlign === "right"
+        ? canvasW - border - spacing
         : canvasW / 2;
-        
-    const isPolaroid = state.layout === "polaroid";
-    const minTextHeight = 28 * scale;
-    const textAreaHeight = Math.max(border, minTextHeight);
-    
-    let bottomOffset;
+
+    let textY: number;
     if (isPolaroid) {
-      bottomOffset = Math.max(border * 0.3, 16 * scale);
+      // In polaroid, caption sits in the 78%-100% gap of inner photo area
+      const gapTop = border + spacing + 0.78 * (innerH - 2 * spacing);
+      const gapBottom = border + innerH;
+      textY = (gapTop + gapBottom) / 2;
     } else {
-      bottomOffset = Math.max((border - textAreaHeight) / 2, 8 * scale);
+      textY = baseCanvasH + (captionAreaH - border) / 2;
     }
-    
-    const textY = canvasH - (bottomOffset + textAreaHeight / 2);
     ctx.fillText(state.captionText, textX, textY);
   }
 
-  // Draw stickers
+  // End frame offset — stickers are drawn relative to this same offset
+  ctx.restore();
+
+  // Draw stickers (in bleed-offset space so they can extend beyond frame)
   if (state.stickers && state.stickers.length > 0) {
     const loadedStickers = await Promise.all(
-      state.stickers.map((s) => loadImage(s.src).catch(() => null)) // Ignore failed stickers
+      state.stickers.map((s) => loadImage(s.src).catch(() => null))
     );
 
-    const stickerSize = 80 * scale; // w-20 h-20 in CSS = 80px
+    const baseStickerPx = 80 * scale;
 
     for (let i = 0; i < state.stickers.length; i++) {
       const sticker = state.stickers[i];
       const img = loadedStickers[i];
       if (!img) continue;
 
-      const cx = border + sticker.x * innerW;
-      const cy = border + sticker.y * innerH;
+      // sticker.x/y are fractions of inner area; map to export coords (with bleed offset)
+      const cx = bleed + border + sticker.x * innerW;
+      const cy = bleed + border + sticker.y * innerH;
+
+      const stickerSize = baseStickerPx * (sticker.scale || 1);
 
       ctx.save();
       ctx.translate(cx, cy);
-      // Currently no rotation in UI, but if added later, we can support it here:
       if (sticker.rotation) {
         ctx.rotate((sticker.rotation * Math.PI) / 180);
       }
@@ -216,18 +217,21 @@ function drawFilmHoles(ctx: CanvasRenderingContext2D, w: number, h: number, colo
   const holeR = 1.5 * scale;
   const gap = 20 * scale;
   const count = Math.floor(h / gap);
-  ctx.fillStyle = darkenColor(color, 30);
+
+  ctx.save();
+  ctx.fillStyle = getContrastColor(color) === "#171717" ? "#000000" : "#ffffff";
+  ctx.globalAlpha = 0.2;
+
   for (let i = 0; i < count; i++) {
     const y = gap / 2 + i * gap;
-    // Left holes
     ctx.beginPath();
     ctx.arc(4 * scale, y, holeR, 0, Math.PI * 2);
     ctx.fill();
-    // Right holes
     ctx.beginPath();
     ctx.arc(w - (4 * scale), y, holeR, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
 }
 
 function normalizeHex(hex: string): string {
@@ -245,12 +249,4 @@ function getContrastColor(hex: string): string {
   const b = parseInt(norm.slice(5, 7), 16);
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return lum > 0.5 ? "#171717" : "#FAFAF7";
-}
-
-function darkenColor(hex: string, amount: number): string {
-  const norm = normalizeHex(hex);
-  const r = Math.max(0, parseInt(norm.slice(1, 3), 16) - amount);
-  const g = Math.max(0, parseInt(norm.slice(3, 5), 16) - amount);
-  const b = Math.max(0, parseInt(norm.slice(5, 7), 16) - amount);
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }

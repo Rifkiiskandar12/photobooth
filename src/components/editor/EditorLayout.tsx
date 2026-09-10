@@ -22,7 +22,7 @@ export default function EditorLayout() {
 
   const hasPhotos = state.photos.length > 0;
 
-  if (!hasPhotos) {
+  if (!hasPhotos && !state.hasStartedEditing) {
     return <PhotoInput />;
   }
 

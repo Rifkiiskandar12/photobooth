@@ -45,7 +45,10 @@ export interface EditorState {
   captionFont: string;
   captionSize: number;
   captionAlign: "left" | "center" | "right";
+  captionColor: string;
   stickers: StickerItem[];
+  activeStickerId: string | null;
+  hasStartedEditing: boolean;
 }
 
 type Action =
@@ -53,6 +56,7 @@ type Action =
   | { type: "ADD_PHOTO"; photo: PhotoItem }
   | { type: "REMOVE_PHOTO"; id: string }
   | { type: "UPDATE_PHOTO"; id: string; updates: Partial<PhotoItem> }
+  | { type: "REPLACE_PHOTO"; index: number; photo: PhotoItem }
   | { type: "SET_LAYOUT"; layout: LayoutType }
   | { type: "SET_FRAME_COLOR"; color: string }
   | { type: "SET_BORDER_THICKNESS"; value: number }
@@ -67,9 +71,12 @@ type Action =
   | { type: "SET_CAPTION_FONT"; font: string }
   | { type: "SET_CAPTION_SIZE"; size: number }
   | { type: "SET_CAPTION_ALIGN"; align: "left" | "center" | "right" }
+  | { type: "SET_CAPTION_COLOR"; color: string }
   | { type: "ADD_STICKER"; sticker: StickerItem }
   | { type: "UPDATE_STICKER"; id: string; updates: Partial<StickerItem> }
   | { type: "REMOVE_STICKER"; id: string }
+  | { type: "SET_ACTIVE_STICKER"; id: string | null }
+  | { type: "SET_HAS_STARTED_EDITING"; value: boolean }
   | { type: "RESET" };
 
 const initialState: EditorState = {
@@ -88,7 +95,10 @@ const initialState: EditorState = {
   captionFont: "Inter",
   captionSize: 14,
   captionAlign: "center",
+  captionColor: "auto",
   stickers: [],
+  activeStickerId: null,
+  hasStartedEditing: false,
 };
 
 function reducer(state: EditorState, action: Action): EditorState {
@@ -104,6 +114,15 @@ function reducer(state: EditorState, action: Action): EditorState {
     }
     case "UPDATE_PHOTO":
       return { ...state, photos: state.photos.map((p) => p.id === action.id ? { ...p, ...action.updates } : p) };
+    case "REPLACE_PHOTO": {
+      const newPhotos = [...state.photos];
+      if (action.index >= 0 && action.index < newPhotos.length) {
+        const oldPhoto = newPhotos[action.index];
+        if (oldPhoto.src.startsWith("blob:")) URL.revokeObjectURL(oldPhoto.src);
+        newPhotos[action.index] = action.photo;
+      }
+      return { ...state, photos: newPhotos };
+    }
     case "SET_LAYOUT": return { ...state, layout: action.layout };
     case "SET_FRAME_COLOR": return { ...state, frameColor: action.color };
     case "SET_BORDER_THICKNESS": return { ...state, borderThickness: action.value };
@@ -118,9 +137,12 @@ function reducer(state: EditorState, action: Action): EditorState {
     case "SET_CAPTION_FONT": return { ...state, captionFont: action.font };
     case "SET_CAPTION_SIZE": return { ...state, captionSize: action.size };
     case "SET_CAPTION_ALIGN": return { ...state, captionAlign: action.align };
-    case "ADD_STICKER": return { ...state, stickers: [...state.stickers, action.sticker] };
+    case "SET_CAPTION_COLOR": return { ...state, captionColor: action.color };
+    case "ADD_STICKER": return { ...state, stickers: [...state.stickers, action.sticker], activeStickerId: action.sticker.id };
     case "UPDATE_STICKER": return { ...state, stickers: state.stickers.map((s) => s.id === action.id ? { ...s, ...action.updates } : s) };
-    case "REMOVE_STICKER": return { ...state, stickers: state.stickers.filter((s) => s.id !== action.id) };
+    case "REMOVE_STICKER": return { ...state, stickers: state.stickers.filter((s) => s.id !== action.id), activeStickerId: state.activeStickerId === action.id ? null : state.activeStickerId };
+    case "SET_ACTIVE_STICKER": return { ...state, activeStickerId: action.id };
+    case "SET_HAS_STARTED_EDITING": return { ...state, hasStartedEditing: action.value };
     case "RESET": {
       state.photos.forEach(p => { if (p.src.startsWith("blob:")) URL.revokeObjectURL(p.src) });
       return initialState;
