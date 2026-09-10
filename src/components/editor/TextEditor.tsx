@@ -10,6 +10,18 @@ const FONTS = [
   { name: "Georgia", label: "Classic Serif" },
 ];
 
+const TEXT_COLORS = [
+  { value: "auto", label: "Auto" },
+  { value: "#171717", label: "Hitam" },
+  { value: "#FFFFFF", label: "Putih" },
+  { value: "#F5EBE0", label: "Krem" },
+  { value: "#4A3728", label: "Kopi" },
+  { value: "#D9A7A0", label: "Rose" },
+  { value: "#A95C48", label: "Terra" },
+  { value: "#1E293B", label: "Navy" },
+  { value: "#C9A84C", label: "Emas" },
+];
+
 export default function TextEditor() {
   const { state, dispatch } = useEditor();
 
@@ -30,6 +42,53 @@ export default function TextEditor() {
         <div className="flex justify-between text-[11px] text-muted mt-1.5 px-1">
           <span>Printed on the bottom of the frame</span>
           <span>{state.captionText.length}/40</span>
+        </div>
+      </div>
+
+      {/* Text Color — same UI style as Frame Color */}
+      <div>
+        <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-3">
+          Warna Teks
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {TEXT_COLORS.map((c) => (
+            <button
+              key={c.value}
+              onClick={() => dispatch({ type: "SET_CAPTION_COLOR", color: c.value })}
+              className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 flex items-center justify-center ${
+                state.captionColor === c.value
+                  ? "border-accent scale-110 ring-2 ring-accent/30"
+                  : "border-border"
+              }`}
+              style={
+                c.value === "auto"
+                  ? { background: "conic-gradient(#171717 50%, #FFFFFF 50%)" }
+                  : { backgroundColor: c.value }
+              }
+              title={c.label}
+            />
+          ))}
+          {/* Custom color picker — same "+" style as FrameCustomizer */}
+          <label
+            className={`w-8 h-8 rounded-full border-2 border-dashed cursor-pointer hover:border-accent flex items-center justify-center overflow-hidden relative transition-all ${
+              !TEXT_COLORS.find((c) => c.value === state.captionColor)
+                ? "border-accent ring-2 ring-accent/30 scale-110"
+                : "border-border"
+            }`}
+            style={
+              !TEXT_COLORS.find((c) => c.value === state.captionColor) && state.captionColor !== "auto"
+                ? { backgroundColor: state.captionColor }
+                : {}
+            }
+          >
+            <span className="text-xs text-muted z-10 select-none">+</span>
+            <input
+              type="color"
+              value={state.captionColor === "auto" ? "#171717" : state.captionColor}
+              onChange={(e) => dispatch({ type: "SET_CAPTION_COLOR", color: e.target.value })}
+              className="absolute opacity-0 w-0 h-0"
+            />
+          </label>
         </div>
       </div>
 
