@@ -29,18 +29,17 @@ export default function TextEditor() {
     <div className="space-y-6">
       <div>
         <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
-          Caption Text
+          Caption Foto
         </h3>
         <input
           type="text"
-          placeholder="e.g. Summer Memories 2026 ✨"
+          placeholder="Tambah Caption"
           value={state.captionText}
           onChange={(e) => dispatch({ type: "SET_CAPTION_TEXT", text: e.target.value })}
           className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:border-accent"
           maxLength={40}
         />
-        <div className="flex justify-between text-[11px] text-muted mt-1.5 px-1">
-          <span>Printed on the bottom of the frame</span>
+        <div className="flex justify-end text-[11px] text-muted mt-1.5 px-1">
           <span>{state.captionText.length}/40</span>
         </div>
       </div>
@@ -94,7 +93,7 @@ export default function TextEditor() {
 
       <div>
         <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
-          Font Style
+          Font Teks
         </h3>
         <div className="space-y-2">
           {FONTS.map((f) => (
@@ -117,7 +116,7 @@ export default function TextEditor() {
 
       <div>
         <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
-          Text Alignment
+          Teks align  
         </h3>
         <div className="grid grid-cols-3 gap-2">
           <button
@@ -155,7 +154,7 @@ export default function TextEditor() {
 
       <div>
         <div className="flex justify-between text-xs mb-1.5">
-          <span className="text-muted">Font Size</span>
+          <span className="text-muted">Ukuran Font</span>
           <span className="text-text font-medium">{state.captionSize}px</span>
         </div>
         <input

@@ -53,7 +53,20 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
 
   // Frame background
   if (state.bgType === "gradient") {
-    const grad = ctx.createLinearGradient(0, 0, 0, canvasH);
+    let x0 = 0, y0 = 0, x1 = 0, y1 = canvasH;
+    const angle = state.gradientAngle || 180;
+    
+    // Map common CSS gradient angles to canvas coordinates
+    if (angle === 0) { x0 = 0; y0 = canvasH; x1 = 0; y1 = 0; }
+    else if (angle === 45) { x0 = 0; y0 = canvasH; x1 = canvasW; y1 = 0; }
+    else if (angle === 90) { x0 = 0; y0 = 0; x1 = canvasW; y1 = 0; }
+    else if (angle === 135) { x0 = 0; y0 = 0; x1 = canvasW; y1 = canvasH; }
+    else if (angle === 180) { x0 = 0; y0 = 0; x1 = 0; y1 = canvasH; }
+    else if (angle === 225) { x0 = canvasW; y0 = 0; x1 = 0; y1 = canvasH; }
+    else if (angle === 270) { x0 = canvasW; y0 = 0; x1 = 0; y1 = 0; }
+    else if (angle === 315) { x0 = canvasW; y0 = canvasH; x1 = 0; y1 = 0; }
+    
+    const grad = ctx.createLinearGradient(x0, y0, x1, y1);
     grad.addColorStop(0, state.bgGradient[0]);
     grad.addColorStop(1, state.bgGradient[1]);
     ctx.fillStyle = grad;

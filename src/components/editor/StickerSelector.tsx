@@ -2,7 +2,7 @@
 import { useEditor } from "@/stores/editor-store";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { RotateCw, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
 export default function StickerSelector() {
   const { state, dispatch } = useEditor();

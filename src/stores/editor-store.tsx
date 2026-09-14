@@ -41,6 +41,7 @@ export interface EditorState {
   bgType: BgType;
   bgColor: string;
   bgGradient: [string, string];
+  gradientAngle: number;
   captionText: string;
   captionFont: string;
   captionSize: number;
@@ -67,6 +68,7 @@ type Action =
   | { type: "SET_BG_TYPE"; bgType: BgType }
   | { type: "SET_BG_COLOR"; color: string }
   | { type: "SET_BG_GRADIENT"; gradient: [string, string] }
+  | { type: "SET_GRADIENT_ANGLE"; angle: number }
   | { type: "SET_CAPTION_TEXT"; text: string }
   | { type: "SET_CAPTION_FONT"; font: string }
   | { type: "SET_CAPTION_SIZE"; size: number }
@@ -91,6 +93,7 @@ const initialState: EditorState = {
   bgType: "solid",
   bgColor: "#FFFFFF",
   bgGradient: ["#FFFFFF", "#D9A7A0"],
+  gradientAngle: 180,
   captionText: "",
   captionFont: "Inter",
   captionSize: 14,
@@ -133,6 +136,7 @@ function reducer(state: EditorState, action: Action): EditorState {
     case "SET_BG_TYPE": return { ...state, bgType: action.bgType };
     case "SET_BG_COLOR": return { ...state, bgColor: action.color };
     case "SET_BG_GRADIENT": return { ...state, bgGradient: action.gradient };
+    case "SET_GRADIENT_ANGLE": return { ...state, gradientAngle: action.angle };
     case "SET_CAPTION_TEXT": return { ...state, captionText: action.text };
     case "SET_CAPTION_FONT": return { ...state, captionFont: action.font };
     case "SET_CAPTION_SIZE": return { ...state, captionSize: action.size };
