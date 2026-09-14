@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Camera, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useEditor } from "@/stores/editor-store";
 import PhotoInput from "./PhotoInput";
 import PhotoCanvas from "./PhotoCanvas";

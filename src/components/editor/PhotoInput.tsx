@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Camera as CameraIcon, Upload, X, ImagePlus, ArrowLeft } from "lucide-react";
@@ -43,9 +44,12 @@ export default function PhotoInput() {
                 <div className="flex flex-wrap gap-3 justify-center mb-8">
                   {state.photos.map((p) => (
                     <div key={p.id} className="relative group">
-                      <img
+                      <Image
                         src={p.src}
                         alt=""
+                        width={80}
+                        height={80}
+                        unoptimized
                         className="w-20 h-20 object-cover rounded-xl border border-border"
                       />
                       <button
