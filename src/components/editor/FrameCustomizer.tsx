@@ -16,8 +16,8 @@ const PRESET_COLORS = [
 ];
 
 const GRADIENTS: [string, string][] = [
-  ["#F5F0E8", "#F4C2C2"],
-  ["#5B7FA5", "#C3AED6"],
+  ["#F1FEC6", "#A882DD"],
+  ["#58A6FF", "#FFEDD5"],
   ["#7FA07A", "#F5F0E8"],
   ["#171717", "#333333"],
 ];
@@ -79,21 +79,87 @@ export default function FrameCustomizer() {
           </div>
         </div>
       ) : (
-        <div>
-          <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-3">Gradient Palette</h3>
-          <div className="flex flex-wrap gap-2.5">
-            {GRADIENTS.map((g, i) => (
-              <button
-                key={i}
-                onClick={() => dispatch({ type: "SET_BG_GRADIENT", gradient: g })}
-                className={`w-12 h-10 rounded-xl border-2 transition-all hover:scale-105 ${
-                  state.bgGradient[0] === g[0] && state.bgGradient[1] === g[1]
-                    ? "border-accent ring-2 ring-accent/30"
-                    : "border-border"
-                }`}
-                style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}
-              />
-            ))}
+        <div className="space-y-5">
+          <div>
+            <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-3">Gradient Palette</h3>
+            <div className="flex flex-wrap gap-2.5">
+              {GRADIENTS.map((g, i) => (
+                <button
+                  key={i}
+                  onClick={() => dispatch({ type: "SET_BG_GRADIENT", gradient: g })}
+                  className={`w-12 h-10 rounded-xl border-2 transition-all hover:scale-105 ${
+                    state.bgGradient[0] === g[0] && state.bgGradient[1] === g[1]
+                      ? "border-accent ring-2 ring-accent/30"
+                      : "border-border"
+                  }`}
+                  style={{ background: `linear-gradient(135deg, ${g[0]}, ${g[1]})` }}
+                />
+              ))}
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            <h3 className="text-xs font-medium text-muted uppercase tracking-wider">Custom Gradient</h3>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div 
+                  className="w-8 h-8 rounded-full border border-border shadow-sm overflow-hidden relative"
+                  style={{ backgroundColor: state.bgGradient[0] }}
+                >
+                  <input
+                    type="color"
+                    value={state.bgGradient[0]}
+                    onChange={(e) => dispatch({ type: "SET_BG_GRADIENT", gradient: [e.target.value, state.bgGradient[1]] })}
+                    className="absolute opacity-0 w-0 h-0"
+                  />
+                </div>
+                <span className="text-xs text-muted">Color 1</span>
+              </label>
+              
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div 
+                  className="w-8 h-8 rounded-full border border-border shadow-sm overflow-hidden relative"
+                  style={{ backgroundColor: state.bgGradient[1] }}
+                >
+                  <input
+                    type="color"
+                    value={state.bgGradient[1]}
+                    onChange={(e) => dispatch({ type: "SET_BG_GRADIENT", gradient: [state.bgGradient[0], e.target.value] })}
+                    className="absolute opacity-0 w-0 h-0"
+                  />
+                </div>
+                <span className="text-xs text-muted">Color 2</span>
+              </label>
+            </div>
+            
+            <div className="pt-2">
+              <h4 className="text-[10px] font-medium text-muted uppercase mb-2">Direction</h4>
+              <div className="flex gap-1.5 flex-wrap">
+                {[
+                  { angle: 0, label: "↑" },
+                  { angle: 45, label: "↗" },
+                  { angle: 90, label: "→" },
+                  { angle: 135, label: "↘" },
+                  { angle: 180, label: "↓" },
+                  { angle: 225, label: "↙" },
+                  { angle: 270, label: "←" },
+                  { angle: 315, label: "↖" },
+                ].map(({ angle, label }) => (
+                  <button
+                    key={angle}
+                    onClick={() => dispatch({ type: "SET_GRADIENT_ANGLE", angle })}
+                    className={`w-8 h-8 rounded-lg border text-sm flex items-center justify-center transition-colors ${
+                      state.gradientAngle === angle
+                        ? "border-accent bg-accent/10 text-accent font-medium"
+                        : "border-border text-muted hover:bg-bg-secondary hover:text-text"
+                    }`}
+                    title={`${angle}°`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}

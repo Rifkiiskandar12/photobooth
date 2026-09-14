@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
 const NAV_LINKS = [
   { label: "Templates", href: "#templates" },
@@ -52,17 +52,6 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* CTA */}
-        <div className="hidden md:block">
-          <Link
-            href="/editor"
-            className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-medium rounded-full hover:bg-primary/90 hover:scale-[1.03] active:scale-[0.98] transition-all duration-200"
-          >
-            Create Photo
-            <span className="text-xs opacity-70">↗</span>
-          </Link>
-        </div>
-
         {/* Mobile toggle */}
         <button
           className="md:hidden p-2"
@@ -93,12 +82,6 @@ export default function Navbar() {
                   {link.label}
                 </a>
               ))}
-              <Link
-                href="/editor"
-                className="btn-primary inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-medium rounded-full"
-              >
-                Create Photo ↗
-              </Link>
             </div>
           </motion.div>
         )}

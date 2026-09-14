@@ -3,9 +3,11 @@
 import { useEditor } from "@/stores/editor-store";
 import { getLayout, SlotRect } from "@/lib/layouts";
 import { getFilterCSS } from "@/lib/filters";
-import { motion, PanInfo, useMotionValue } from "framer-motion";
-import { useRef, useCallback, useEffect } from "react";
-import { RotateCw, Trash2, Maximize2 } from "lucide-react";
+import { motion, PanInfo, useMotionValue, useDragControls, AnimatePresence } from "framer-motion";
+import { useRef, useCallback, useEffect, useState } from "react";
+import { RotateCw, Trash2, Maximize2, ImagePlus, Camera } from "lucide-react";
+import { CameraCaptureModal } from "./CameraCaptureModal";
+import { createPhoto } from "@/stores/editor-store";
 
 export default function PhotoCanvas() {
   const { state, dispatch } = useEditor();
@@ -13,10 +15,60 @@ export default function PhotoCanvas() {
   const gap = state.photoGap / 300;
   const slots = layout.slots(gap);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  const inputRef = useRef<HTMLInputElement>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
+  const [cameraTarget, setCameraTarget] = useState<"add" | number>("add");
+
+  const handleAddPhotos = (files: FileList | null) => {
+    if (!files) return;
+    const valid = Array.from(files).filter((f) =>
+      ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(f.type)
+    );
+    const maxPhotos = layout.photoCount;
+    const activePhotosCount = Math.min(state.photos.length, maxPhotos);
+    const remaining = maxPhotos - activePhotosCount;
+    if (remaining <= 0) return;
+
+    Promise.all(
+      valid.slice(0, remaining).map(
+        (f) => new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(f);
+        })
+      )
+    ).then((srcs) => {
+      srcs.forEach((src) => dispatch({ type: "ADD_PHOTO", photo: createPhoto(src) }));
+    });
+  };
+
+  const handleReplacePhoto = (files: FileList | null, index: number) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result as string;
+      dispatch({ type: "REPLACE_PHOTO", index, photo: createPhoto(src) });
+    };
+    reader.readAsDataURL(file);
+    setReplaceIndex(null);
+  };
+
+  const handleCameraCapture = (src: string) => {
+    if (cameraTarget === "add") {
+      dispatch({ type: "ADD_PHOTO", photo: createPhoto(src) });
+    } else {
+      dispatch({ type: "REPLACE_PHOTO", index: cameraTarget, photo: createPhoto(src) });
+    }
+    setShowCamera(false);
+  };
 
   const bgStyle =
     state.bgType === "gradient"
-      ? { background: `linear-gradient(to bottom, ${state.bgGradient[0]}, ${state.bgGradient[1]})` }
+      ? { background: `linear-gradient(${state.gradientAngle}deg, ${state.bgGradient[0]}, ${state.bgGradient[1]})` }
       : { backgroundColor: state.frameColor };
 
   const isPolaroid = state.layout === "polaroid";
@@ -30,9 +82,19 @@ export default function PhotoCanvas() {
     : state.captionColor;
 
   return (
-    <div className="relative">
+    <div 
+      className="relative w-full h-full flex items-center justify-center"
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) {
+          dispatch({ type: "SET_ACTIVE_STICKER", id: null });
+        }
+      }}
+    >
       <div
         className="relative shadow-2xl transition-all duration-300"
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget) dispatch({ type: "SET_ACTIVE_STICKER", id: null });
+        }}
         style={{
           ...bgStyle,
           borderRadius: `${state.cornerRadius}px`,
@@ -46,6 +108,9 @@ export default function PhotoCanvas() {
       >
         <div
           className="relative"
+          onPointerDown={(e) => {
+            if (e.target === e.currentTarget) dispatch({ type: "SET_ACTIVE_STICKER", id: null });
+          }}
           style={{
             aspectRatio: `${layout.aspect}`,
             padding: `${state.innerSpacing}px`,
@@ -75,17 +140,36 @@ export default function PhotoCanvas() {
           {slots.map((slot, i) => (
             <PhotoSlot
               key={i}
+              index={i}
               slot={slot}
               photo={state.photos[i]}
               globalFilter={state.globalFilter}
               cornerRadius={Math.max(0, state.cornerRadius - 4)}
+              onReplace={(index) => {
+                setReplaceIndex(index);
+                replaceInputRef.current?.click();
+              }}
+              onCamera={(index) => {
+                setCameraTarget(index);
+                setShowCamera(true);
+              }}
+              onAdd={() => {
+                inputRef.current?.click();
+              }}
+              onCameraAdd={() => {
+                setCameraTarget("add");
+                setShowCamera(true);
+              }}
+              onDelete={(id) => {
+                dispatch({ type: "REMOVE_PHOTO", id });
+              }}
             />
           ))}
 
-          {/* Stickers layer - allowed to overflow */}
+          {/* Stickers layer - allowed to overflow, pointer-events-none so photo slot buttons remain clickable */}
           <div
             ref={containerRef}
-            className="absolute inset-0 z-20"
+            className="absolute inset-0 z-20 pointer-events-none"
             onClick={(e) => {
               // Deselect sticker if clicking canvas background
               if (e.target === e.currentTarget) {
@@ -104,7 +188,6 @@ export default function PhotoCanvas() {
           </div>
         </div>
 
-        {/* Caption */}
         {state.captionText && (
           <div
             className="absolute left-0 right-0 flex items-center justify-center pointer-events-none select-none"
@@ -127,6 +210,36 @@ export default function PhotoCanvas() {
             </p>
           </div>
         )}
+
+        {/* Hidden file input for add */}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          className="hidden"
+          onChange={(e) => handleAddPhotos(e.target.files)}
+        />
+        {/* Hidden file input for replace */}
+        <input
+          ref={replaceInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            if (replaceIndex !== null) handleReplacePhoto(e.target.files, replaceIndex);
+          }}
+        />
+
+        {/* Camera modal */}
+        <AnimatePresence>
+          {showCamera && (
+            <CameraCaptureModal
+              onCapture={handleCameraCapture}
+              onClose={() => setShowCamera(false)}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -134,15 +247,27 @@ export default function PhotoCanvas() {
 
 /* ── Photo Slot ───────────────────────────── */
 function PhotoSlot({
+  index,
   slot,
   photo,
   globalFilter,
   cornerRadius,
+  onReplace,
+  onCamera,
+  onAdd,
+  onCameraAdd,
+  onDelete,
 }: {
+  index: number;
   slot: SlotRect;
   photo?: import("@/stores/editor-store").PhotoItem;
   globalFilter: string;
   cornerRadius: number;
+  onReplace: (index: number) => void;
+  onCamera: (index: number) => void;
+  onAdd: () => void;
+  onCameraAdd: () => void;
+  onDelete: (id: string) => void;
 }) {
   const filterCSS = photo?.filter && photo.filter !== "none"
     ? getFilterCSS(photo.filter)
@@ -160,7 +285,7 @@ function PhotoSlot({
 
   return (
     <div
-      className="absolute overflow-hidden bg-bg-secondary transition-all duration-200"
+      className="absolute overflow-hidden bg-bg-secondary transition-all duration-200 group"
       style={{
         left: `${slot.x * 100}%`,
         top: `${slot.y * 100}%`,
@@ -182,13 +307,80 @@ function PhotoSlot({
             }}
             draggable={false}
           />
+          {/* Controls - visible on hover on desktop, always visible on mobile if needed but better to show on tap/hover */}
+          <div className="absolute inset-0 bg-black/40 opacity-0 md:group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+            <div className="flex gap-2 w-full max-w-[120px]">
+              <button
+                onClick={(e) => { e.stopPropagation(); onReplace(index); }}
+                className="flex-1 min-h-[44px] bg-white/20 hover:bg-white/40 text-white rounded-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+                title="Ganti foto"
+              >
+                <ImagePlus className="w-5 h-5" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onCamera(index); }}
+                className="flex-1 min-h-[44px] bg-white/20 hover:bg-white/40 text-white rounded-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+                title="Ambil foto"
+              >
+                <Camera className="w-5 h-5" />
+              </button>
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(photo.id); }}
+              className="w-full max-w-[120px] min-h-[44px] bg-red-500/80 hover:bg-red-500 text-white rounded-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+              title="Hapus foto"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
+          {/* Mobile persistent delete button if we want to ensure it's always there, or rely on active state. 
+              Let's make the overlay visible on touch by relying on standard touch hover behavior, 
+              but to be safer for "Hapus foto selalu terlihat" on mobile: */}
+          <div className="md:hidden absolute top-1 right-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(photo.id); }}
+              className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg"
+              title="Hapus foto"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="md:hidden absolute bottom-1 left-1 right-1 flex justify-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); onReplace(index); }}
+              className="w-8 h-8 bg-black/60 text-white rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm"
+              title="Ganti foto"
+            >
+              <ImagePlus className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onCamera(index); }}
+              className="w-8 h-8 bg-black/60 text-white rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm"
+              title="Ambil foto"
+            >
+              <Camera className="w-4 h-4" />
+            </button>
+          </div>
         </>
       ) : (
-        /* Empty slot: simple placeholder */
-        <div className="w-full h-full flex items-center justify-center text-muted/30">
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
+        /* Empty slot: clickable area to add photo */
+        <div 
+          className="w-full h-full flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-black/5 transition-colors"
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); onAdd(); }}
+            className="w-10 h-10 rounded-full bg-border/60 hover:bg-accent/20 hover:text-accent flex items-center justify-center text-muted transition-colors"
+            title="Upload foto"
+          >
+            <ImagePlus className="w-5 h-5" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onCameraAdd(); }}
+            className="w-10 h-10 rounded-full bg-border/60 hover:bg-accent/20 hover:text-accent flex items-center justify-center text-muted transition-colors"
+            title="Ambil foto dengan kamera"
+          >
+            <Camera className="w-5 h-5" />
+          </button>
         </div>
       )}
     </div>
@@ -208,10 +400,33 @@ function DraggableSticker({
   const { state, dispatch } = useEditor();
   const motionX = useMotionValue("-50%");
   const motionY = useMotionValue("-50%");
+  const dragControls = useDragControls();
   const isResizing = useRef(false);
   const isRotating = useRef(false);
+  const isDragging = useRef(false);
   const startScale = useRef(1);
   const startDist = useRef(0);
+  const cleanupListeners = useRef<(() => void) | null>(null);
+
+  // Global safety net for pointer capture
+  useEffect(() => {
+    const forceCleanup = () => {
+      isResizing.current = false;
+      isRotating.current = false;
+      isDragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.pointerEvents = "";
+      if (cleanupListeners.current) cleanupListeners.current();
+    };
+
+    window.addEventListener("pointerup", forceCleanup, { capture: true });
+    window.addEventListener("pointercancel", forceCleanup, { capture: true });
+    return () => {
+      window.removeEventListener("pointerup", forceCleanup, { capture: true });
+      window.removeEventListener("pointercancel", forceCleanup, { capture: true });
+      forceCleanup();
+    };
+  }, []);
 
   const handleDragEnd = (_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (!containerRef.current) return;
@@ -258,6 +473,7 @@ function DraggableSticker({
 
     motionX.set("-50%");
     motionY.set("-50%");
+    isDragging.current = false;
   };
 
   const handleRemove = (e: React.MouseEvent | React.TouchEvent) => {
@@ -273,6 +489,9 @@ function DraggableSticker({
   // Resize handle: drag away from center to enlarge
   const handleResizeStart = useCallback((e: React.PointerEvent) => {
     e.stopPropagation();
+    try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
+    if (isDragging.current || isRotating.current) return;
+    
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const cx = rect.left + sticker.x * rect.width;
@@ -312,16 +531,27 @@ function DraggableSticker({
     };
     const onUp = () => {
       isResizing.current = false;
+      document.body.style.cursor = "";
+      document.body.style.pointerEvents = "";
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      cleanupListeners.current = null;
     };
+    cleanupListeners.current = onUp;
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    document.body.style.cursor = "se-resize";
+    document.body.style.pointerEvents = "none";
   }, [dispatch, sticker.id, sticker.scale, sticker.x, sticker.y, sticker.rotation, state, containerRef]);
 
   // Rotation handle
   const handleRotateStart = useCallback((e: React.PointerEvent) => {
     e.stopPropagation();
+    try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
+    if (isDragging.current || isResizing.current) return;
+
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const cx = rect.left + sticker.x * rect.width;
@@ -343,7 +573,7 @@ function DraggableSticker({
       const delta = angle - startAngle;
       const newRotation = startRotation + delta;
 
-      // Ensure rotation doesn't push bounds out
+      // Only clamp position if sticker actually exceeds allowed area after rotation
       const rad = newRotation * Math.PI / 180;
       const trigSum = Math.abs(Math.cos(rad)) + Math.abs(Math.sin(rad));
       const halfBox = 40 * (sticker.scale || 1) * trigSum;
@@ -358,21 +588,41 @@ function DraggableSticker({
       const minY = minPxY / rect.height;
       const maxY = maxPxY / rect.height;
 
-      const clampedX = maxX >= minX ? Math.max(minX, Math.min(maxX, sticker.x)) : 0.5;
-      const clampedY = maxY >= minY ? Math.max(minY, Math.min(maxY, sticker.y)) : 0.5;
+      // Preserve current position — only adjust if actually out of bounds
+      const currentX = sticker.x;
+      const currentY = sticker.y;
+      const needsClampX = maxX >= minX && (currentX < minX || currentX > maxX);
+      const needsClampY = maxY >= minY && (currentY < minY || currentY > maxY);
+
+      const updates: Partial<import("@/stores/editor-store").StickerItem> = { rotation: newRotation };
+      if (needsClampX) {
+        updates.x = Math.max(minX, Math.min(maxX, currentX));
+      }
+      if (needsClampY) {
+        updates.y = Math.max(minY, Math.min(maxY, currentY));
+      }
 
       dispatch({ 
         type: "UPDATE_STICKER", 
         id: sticker.id, 
-        updates: { rotation: newRotation, x: clampedX, y: clampedY } 
+        updates,
       });
     };
     const onUp = () => {
+      isRotating.current = false;
+      document.body.style.cursor = "";
+      document.body.style.pointerEvents = "";
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      cleanupListeners.current = null;
     };
+    cleanupListeners.current = onUp;
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    document.body.style.cursor = "grabbing";
+    document.body.style.pointerEvents = "none";
   }, [dispatch, sticker.id, sticker.x, sticker.y, sticker.scale, sticker.rotation, state, containerRef]);
 
   const stickerSize = 80 * (sticker.scale || 1);
@@ -381,6 +631,8 @@ function DraggableSticker({
   return (
     <motion.div
       drag
+      dragControls={dragControls}
+      dragListener={false}
       dragMomentum={false}
       onDragEnd={handleDragEnd}
       onPointerDown={handleSelect}
@@ -399,7 +651,14 @@ function DraggableSticker({
       className="pointer-events-auto"
     >
       {/* Inner rotation wrapper — keeps rotation separate from framer-motion translate */}
+      {/* onPointerDown initiates drag ONLY from sticker body, not from control handles */}
       <div
+        onPointerDown={(e) => { 
+          try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
+          if (isResizing.current || isRotating.current) return;
+          isDragging.current = true;
+          dragControls.start(e); 
+        }}
         style={{ transform: `rotate(${rotation}deg)`, width: "100%", height: "100%", position: "relative" }}
       >
         {/* Sticker image */}
@@ -411,45 +670,42 @@ function DraggableSticker({
           draggable={false}
         />
 
-        {/* Selection border */}
+        {/* Selection border & Controls */}
         {isActive && (
-          <div className="absolute inset-0 border-2 border-accent rounded-sm pointer-events-none" />
+          <>
+            <div className="absolute inset-0 border-2 border-accent rounded-sm pointer-events-none" />
+            
+            {/* Delete button — top-right */}
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); }}
+              onClick={handleRemove}
+              onTouchEnd={(e) => { e.preventDefault(); handleRemove(e); }}
+              className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-lg z-30 hover:bg-red-600 transition-colors pointer-events-auto"
+              style={{ touchAction: "none" }}
+            >
+              <Trash2 className="w-3.5 h-3.5" style={{ transform: `rotate(${-rotation}deg)` }} />
+            </button>
+
+            {/* Resize handle — bottom-right */}
+            <div
+              onPointerDown={handleResizeStart}
+              className="absolute -bottom-3 -right-3 w-7 h-7 bg-white border-2 border-accent rounded-full flex items-center justify-center cursor-se-resize z-30 shadow-lg pointer-events-auto"
+              style={{ touchAction: "none" }}
+            >
+              <Maximize2 className="w-3 h-3 text-accent" style={{ transform: `rotate(${-rotation}deg)` }} />
+            </div>
+
+            {/* Rotation handle — top-left */}
+            <div
+              onPointerDown={handleRotateStart}
+              className="absolute -top-3 -left-3 w-7 h-7 bg-white border-2 border-accent rounded-full flex items-center justify-center cursor-grab z-30 shadow-lg pointer-events-auto"
+              style={{ touchAction: "none" }}
+            >
+              <RotateCw className="w-3 h-3 text-accent" style={{ transform: `rotate(${-rotation}deg)` }} />
+            </div>
+          </>
         )}
       </div>
-
-      {/* Controls — outside rotation wrapper so they stay aligned with viewport */}
-      {isActive && (
-        <>
-          {/* Delete button — large touch target, top-right */}
-          <button
-            onPointerDown={(e) => { e.stopPropagation(); }}
-            onClick={handleRemove}
-            onTouchEnd={(e) => { e.preventDefault(); handleRemove(e); }}
-            className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-lg z-30 hover:bg-red-600 transition-colors"
-            style={{ touchAction: "none" }}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Resize handle — bottom-right */}
-          <div
-            onPointerDown={handleResizeStart}
-            className="absolute -bottom-3 -right-3 w-7 h-7 bg-white border-2 border-accent rounded-full flex items-center justify-center cursor-se-resize z-30 shadow-lg"
-            style={{ touchAction: "none" }}
-          >
-            <Maximize2 className="w-3 h-3 text-accent" />
-          </div>
-
-          {/* Rotation handle — top-left */}
-          <div
-            onPointerDown={handleRotateStart}
-            className="absolute -top-3 -left-3 w-7 h-7 bg-white border-2 border-accent rounded-full flex items-center justify-center cursor-grab z-30 shadow-lg"
-            style={{ touchAction: "none" }}
-          >
-            <RotateCw className="w-3 h-3 text-accent" />
-          </div>
-        </>
-      )}
     </motion.div>
   );
 }

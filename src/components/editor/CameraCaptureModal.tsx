@@ -35,8 +35,15 @@ export function CameraCaptureModal({
   }, []);
 
   useEffect(() => {
-    startCamera(facingMode);
+    let active = true;
+    const initCamera = async () => {
+      if (active) {
+        await startCamera(facingMode);
+      }
+    };
+    initCamera();
     return () => {
+      active = false;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
