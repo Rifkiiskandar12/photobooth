@@ -5,7 +5,7 @@ import { getLayout, SlotRect } from "@/lib/layouts";
 import { getFilterCSS } from "@/lib/filters";
 import { motion, PanInfo, useMotionValue, useDragControls, AnimatePresence } from "framer-motion";
 import { useRef, useCallback, useEffect, useState } from "react";
-import { RotateCw, Trash2, Maximize2, ImagePlus, Camera } from "lucide-react";
+import { RotateCw, Trash2, Maximize2, ImagePlus, Camera, ZoomIn, ZoomOut, GripHorizontal } from "lucide-react";
 import { CameraCaptureModal } from "./CameraCaptureModal";
 import { createPhoto } from "@/stores/editor-store";
 
@@ -19,8 +19,12 @@ export default function PhotoCanvas() {
   const inputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [cameraSlotIndex, setCameraSlotIndex] = useState<number>(0);
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
-  const [cameraTarget, setCameraTarget] = useState<"add" | number>("add");
+
+  // Drag-reorder state
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
 
   const handleAddPhotos = (files: FileList | null) => {
     if (!files) return;
@@ -57,11 +61,13 @@ export default function PhotoCanvas() {
     setReplaceIndex(null);
   };
 
-  const handleCameraCapture = (src: string) => {
-    if (cameraTarget === "add") {
-      dispatch({ type: "ADD_PHOTO", photo: createPhoto(src) });
+  /** MODE 2: Editor Single Photo Replacement — hanya mengubah slot targetIndex */
+  const replacePhotoInEditor = (src: string, targetIndex: number) => {
+    const photoItem = createPhoto(src);
+    if (state.photos.length > targetIndex) {
+      dispatch({ type: "REPLACE_PHOTO", index: targetIndex, photo: photoItem });
     } else {
-      dispatch({ type: "REPLACE_PHOTO", index: cameraTarget, photo: createPhoto(src) });
+      dispatch({ type: "ADD_PHOTO", photo: photoItem });
     }
     setShowCamera(false);
   };
@@ -87,13 +93,17 @@ export default function PhotoCanvas() {
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) {
           dispatch({ type: "SET_ACTIVE_STICKER", id: null });
+          dispatch({ type: "SET_ACTIVE_PHOTO", id: null });
         }
       }}
     >
       <div
         className="relative shadow-2xl transition-all duration-300"
         onPointerDown={(e) => {
-          if (e.target === e.currentTarget) dispatch({ type: "SET_ACTIVE_STICKER", id: null });
+          if (e.target === e.currentTarget) {
+            dispatch({ type: "SET_ACTIVE_STICKER", id: null });
+            dispatch({ type: "SET_ACTIVE_PHOTO", id: null });
+          }
         }}
         style={{
           ...bgStyle,
@@ -109,7 +119,10 @@ export default function PhotoCanvas() {
         <div
           className="relative"
           onPointerDown={(e) => {
-            if (e.target === e.currentTarget) dispatch({ type: "SET_ACTIVE_STICKER", id: null });
+            if (e.target === e.currentTarget) {
+              dispatch({ type: "SET_ACTIVE_STICKER", id: null });
+              dispatch({ type: "SET_ACTIVE_PHOTO", id: null });
+            }
           }}
           style={{
             aspectRatio: `${layout.aspect}`,
@@ -145,24 +158,36 @@ export default function PhotoCanvas() {
               photo={state.photos[i]}
               globalFilter={state.globalFilter}
               cornerRadius={Math.max(0, state.cornerRadius - 4)}
+              isDragOver={dragOver === i}
+              isDragging={dragFrom === i}
               onReplace={(index) => {
                 setReplaceIndex(index);
                 replaceInputRef.current?.click();
               }}
-              onCamera={(index) => {
-                setCameraTarget(index);
+              onCamera={(idx) => {
+                setCameraSlotIndex(idx);
                 setShowCamera(true);
               }}
               onAdd={() => {
                 inputRef.current?.click();
               }}
-              onCameraAdd={() => {
-                setCameraTarget("add");
+              onCameraAdd={(idx) => {
+                setCameraSlotIndex(idx);
                 setShowCamera(true);
               }}
               onDelete={(id) => {
                 dispatch({ type: "REMOVE_PHOTO", id });
               }}
+              onDragStart={(index) => setDragFrom(index)}
+              onDragOver={(index) => setDragOver(index)}
+              onDrop={(targetIndex) => {
+                if (dragFrom !== null && dragFrom !== targetIndex) {
+                  dispatch({ type: "SWAP_PHOTOS", indexA: dragFrom, indexB: targetIndex });
+                }
+                setDragFrom(null);
+                setDragOver(null);
+              }}
+              onDragEnd={() => { setDragFrom(null); setDragOver(null); }}
             />
           ))}
 
@@ -174,6 +199,7 @@ export default function PhotoCanvas() {
               // Deselect sticker if clicking canvas background
               if (e.target === e.currentTarget) {
                 dispatch({ type: "SET_ACTIVE_STICKER", id: null });
+                dispatch({ type: "SET_ACTIVE_PHOTO", id: null });
               }
             }}
           >
@@ -231,11 +257,15 @@ export default function PhotoCanvas() {
           }}
         />
 
-        {/* Camera modal */}
+        {/* Camera modal (MODE 2: EDITOR SINGLE CAPTURE) */}
         <AnimatePresence>
           {showCamera && (
             <CameraCaptureModal
-              onCapture={handleCameraCapture}
+              mode="editor-single"
+              slotIndex={cameraSlotIndex}
+              onCapture={(src, targetSlotIdx) => {
+                replacePhotoInEditor(src, targetSlotIdx);
+              }}
               onClose={() => setShowCamera(false)}
             />
           )}
@@ -245,30 +275,56 @@ export default function PhotoCanvas() {
   );
 }
 
-/* ── Photo Slot ───────────────────────────── */
+/* ── Photo Slot (Fixed Viewport Frame + Movable Photo Layer) ── */
 function PhotoSlot({
   index,
   slot,
   photo,
   globalFilter,
   cornerRadius,
+  isDragOver,
+  isDragging,
   onReplace,
   onCamera,
   onAdd,
   onCameraAdd,
   onDelete,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: {
   index: number;
   slot: SlotRect;
   photo?: import("@/stores/editor-store").PhotoItem;
   globalFilter: string;
   cornerRadius: number;
+  isDragOver: boolean;
+  isDragging: boolean;
   onReplace: (index: number) => void;
   onCamera: (index: number) => void;
   onAdd: () => void;
-  onCameraAdd: () => void;
+  onCameraAdd: (index: number) => void;
   onDelete: (id: string) => void;
+  onDragStart: (index: number) => void;
+  onDragOver: (index: number) => void;
+  onDrop: (targetIndex: number) => void;
+  onDragEnd: () => void;
 }) {
+  const { state, dispatch } = useEditor();
+  const slotRef = useRef<HTMLDivElement>(null);
+
+  const isSelected = photo ? state.activePhotoId === photo.id : false;
+
+  // Pointer drag state for positioning photo inside frame
+  const isPanning = useRef(false);
+  const panStart = useRef<{ clientX: number; clientY: number; startCropX: number; startCropY: number }>({
+    clientX: 0,
+    clientY: 0,
+    startCropX: 0,
+    startCropY: 0,
+  });
+
   const filterCSS = photo?.filter && photo.filter !== "none"
     ? getFilterCSS(photo.filter)
     : globalFilter !== "none"
@@ -283,99 +339,266 @@ function PhotoSlot({
   }
   const fullFilter = [filterCSS !== "none" ? filterCSS : "", ...adjustments].filter(Boolean).join(" ") || "none";
 
+  // Clamp cropX and cropY so photo never leaves viewport
+  const clampCrop = (x: number, y: number, currentZoom: number) => {
+    const maxOffset = Math.max(0, (currentZoom - 1) / (2 * currentZoom));
+    return {
+      clampedX: Math.max(-maxOffset, Math.min(maxOffset, x)),
+      clampedY: Math.max(-maxOffset, Math.min(maxOffset, y)),
+    };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!photo) return;
+    // Don't start pan if clicking control buttons
+    if ((e.target as HTMLElement).closest("button") || (e.target as HTMLElement).closest(".slot-control")) {
+      return;
+    }
+
+    // Select this photo layer
+    dispatch({ type: "SET_ACTIVE_PHOTO", id: photo.id });
+
+    // Initiate drag positioning inside frame
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+
+    isPanning.current = true;
+    panStart.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      startCropX: photo.cropX || 0,
+      startCropY: photo.cropY || 0,
+    };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isPanning.current || !photo || !slotRef.current) return;
+    const rect = slotRef.current.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const deltaX = (e.clientX - panStart.current.clientX) / rect.width;
+    const deltaY = (e.clientY - panStart.current.clientY) / rect.height;
+
+    const currentZoom = Math.max(1, photo.zoom || 1);
+    const rawX = panStart.current.startCropX + deltaX;
+    const rawY = panStart.current.startCropY + deltaY;
+
+    const { clampedX, clampedY } = clampCrop(rawX, rawY, currentZoom);
+
+    dispatch({
+      type: "UPDATE_PHOTO",
+      id: photo.id,
+      updates: { cropX: clampedX, cropY: clampedY },
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (isPanning.current) {
+      isPanning.current = false;
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {}
+    }
+  };
+
+  const updateZoom = (newZoom: number) => {
+    if (!photo) return;
+    const clampedZoom = Math.max(1, Math.min(3, Number(newZoom.toFixed(2))));
+    const { clampedX, clampedY } = clampCrop(photo.cropX || 0, photo.cropY || 0, clampedZoom);
+    dispatch({
+      type: "UPDATE_PHOTO",
+      id: photo.id,
+      updates: { zoom: clampedZoom, cropX: clampedX, cropY: clampedY },
+    });
+  };
+
+  const rotate90 = () => {
+    if (!photo) return;
+    const newRot = ((photo.rotation || 0) + 90) % 360;
+    dispatch({
+      type: "UPDATE_PHOTO",
+      id: photo.id,
+      updates: { rotation: newRot },
+    });
+  };
+
+  const currentZoom = Math.max(1, photo?.zoom || 1);
+  const currentRotation = photo?.rotation || 0;
+  const currentCropX = photo?.cropX || 0;
+  const currentCropY = photo?.cropY || 0;
+
   return (
     <div
-      className="absolute overflow-hidden bg-bg-secondary transition-all duration-200 group"
+      ref={slotRef}
+      className="absolute overflow-hidden bg-bg-secondary transition-all duration-200 group select-none"
       style={{
         left: `${slot.x * 100}%`,
         top: `${slot.y * 100}%`,
         width: `${slot.w * 100}%`,
         height: `${slot.h * 100}%`,
         borderRadius: `${cornerRadius}px`,
+        outline: isSelected
+          ? "2px solid var(--color-accent, #3b82f6)"
+          : isDragOver
+            ? "2px dashed var(--color-accent, #3b82f6)"
+            : undefined,
+        outlineOffset: "2px",
+        opacity: isDragging ? 0.4 : 1,
+        touchAction: "none",
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      /* ── Slot swap / drag-over target ── */
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        onDragOver(index);
+      }}
+      onDragLeave={() => onDragOver(-1)}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop(index);
       }}
     >
       {photo ? (
         <>
+          {/* PHOTO LAYER: movable & scalable inside fixed frame viewport */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={photo.src}
             alt=""
-            className="w-full h-full object-cover transition-all duration-200"
+            className="w-full h-full object-cover pointer-events-none transition-transform duration-75"
             style={{
               filter: fullFilter,
-              transform: `scale(${photo.zoom}) translate(${photo.cropX * 100}%, ${photo.cropY * 100}%) rotate(${photo.rotation}deg)`,
+              transform: `scale(${currentZoom}) translate(${currentCropX * 100}%, ${currentCropY * 100}%) rotate(${currentRotation}deg)`,
+              transformOrigin: "center center",
             }}
             draggable={false}
           />
-          {/* Controls - visible on hover on desktop, always visible on mobile if needed but better to show on tap/hover */}
-          <div className="absolute inset-0 bg-black/40 opacity-0 md:group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-            <div className="flex gap-2 w-full max-w-[120px]">
-              <button
-                onClick={(e) => { e.stopPropagation(); onReplace(index); }}
-                className="flex-1 min-h-[44px] bg-white/20 hover:bg-white/40 text-white rounded-lg flex items-center justify-center backdrop-blur-sm transition-colors"
-                title="Ganti foto"
-              >
-                <ImagePlus className="w-5 h-5" />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onCamera(index); }}
-                className="flex-1 min-h-[44px] bg-white/20 hover:bg-white/40 text-white rounded-lg flex items-center justify-center backdrop-blur-sm transition-colors"
-                title="Ambil foto"
-              >
-                <Camera className="w-5 h-5" />
-              </button>
+
+          {/* Selected Layer UI: Quick Floating In-Frame Controls for Zoom, Rotate & Reorder */}
+          {isSelected && (
+            <div
+              className="slot-control absolute bottom-2 left-2 right-2 z-30 flex items-center justify-between gap-1 px-2 py-1.5 bg-black/75 backdrop-blur-md rounded-xl text-white shadow-lg pointer-events-auto"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => updateZoom(currentZoom - 0.1)}
+                  disabled={currentZoom <= 1}
+                  className="p-1 hover:bg-white/20 disabled:opacity-30 rounded-md transition-colors"
+                  title="Perkecil"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[10px] font-mono min-w-[32px] text-center">
+                  {Math.round(currentZoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateZoom(currentZoom + 0.1)}
+                  disabled={currentZoom >= 3}
+                  className="p-1 hover:bg-white/20 disabled:opacity-30 rounded-md transition-colors"
+                  title="Perbesar"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="h-3 w-px bg-white/30" />
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={rotate90}
+                  className="p-1 hover:bg-white/20 rounded-md transition-colors"
+                  title="Putar 90°"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                </button>
+                {/* Reorder drag handle */}
+                <div
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    onDragStart(index);
+                  }}
+                  onDragEnd={onDragEnd}
+                  className="p-1 hover:bg-white/20 rounded-md cursor-grab active:cursor-grabbing transition-colors"
+                  title="Seret untuk memindahkan ke slot lain"
+                >
+                  <GripHorizontal className="w-3.5 h-3.5 text-white/80" />
+                </div>
+              </div>
             </div>
+          )}
+
+          {/* Hover Action Bar: Replace, Camera, Delete */}
+          <div
+            className={`slot-control absolute top-1.5 right-1.5 z-20 flex items-center gap-1 transition-opacity ${
+              isSelected ? "opacity-100" : "opacity-0 md:group-hover:opacity-100"
+            }`}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <button
-              onClick={(e) => { e.stopPropagation(); onDelete(photo.id); }}
-              className="w-full max-w-[120px] min-h-[44px] bg-red-500/80 hover:bg-red-500 text-white rounded-lg flex items-center justify-center backdrop-blur-sm transition-colors"
-              title="Hapus foto"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-          </div>
-          {/* Mobile persistent delete button if we want to ensure it's always there, or rely on active state. 
-              Let's make the overlay visible on touch by relying on standard touch hover behavior, 
-              but to be safer for "Hapus foto selalu terlihat" on mobile: */}
-          <div className="md:hidden absolute top-1 right-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(photo.id); }}
-              className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg"
-              title="Hapus foto"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="md:hidden absolute bottom-1 left-1 right-1 flex justify-center gap-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); onReplace(index); }}
-              className="w-8 h-8 bg-black/60 text-white rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm"
+              type="button"
+              onClick={() => onReplace(index)}
+              className="w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-colors"
               title="Ganti foto"
             >
-              <ImagePlus className="w-4 h-4" />
+              <ImagePlus className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); onCamera(index); }}
-              className="w-8 h-8 bg-black/60 text-white rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm"
-              title="Ambil foto"
+              type="button"
+              onClick={() => onCamera(index)}
+              className="w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-colors"
+              title="Ambil foto kamera"
             >
-              <Camera className="w-4 h-4" />
+              <Camera className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(photo.id)}
+              className="w-7 h-7 bg-red-500/80 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-colors"
+              title="Hapus foto"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Drag hint when not selected */}
+          {!isSelected && (
+            <div className="absolute inset-0 bg-transparent cursor-grab active:cursor-grabbing" />
+          )}
         </>
       ) : (
-        /* Empty slot: clickable area to add photo */
-        <div 
-          className="w-full h-full flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-black/5 transition-colors"
+        /* Empty slot: drop target + add buttons */
+        <div
+          className={`w-full h-full flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors ${
+            isDragOver ? "bg-accent/10" : "hover:bg-black/5"
+          }`}
         >
           <button
-            onClick={(e) => { e.stopPropagation(); onAdd(); }}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd();
+            }}
             className="w-10 h-10 rounded-full bg-border/60 hover:bg-accent/20 hover:text-accent flex items-center justify-center text-muted transition-colors"
             title="Upload foto"
           >
             <ImagePlus className="w-5 h-5" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onCameraAdd(); }}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCameraAdd(index);
+            }}
             className="w-10 h-10 rounded-full bg-border/60 hover:bg-accent/20 hover:text-accent flex items-center justify-center text-muted transition-colors"
             title="Ambil foto dengan kamera"
           >

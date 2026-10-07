@@ -7,6 +7,7 @@ import { Camera as CameraIcon, Upload, X, ImagePlus, ArrowLeft } from "lucide-re
 import Link from "next/link";
 import { useEditor, createPhoto } from "@/stores/editor-store";
 import { CameraCaptureModal } from "./CameraCaptureModal";
+import { getLayout } from "@/lib/layouts";
 
 type Mode = "select" | "camera" | "upload";
 
@@ -101,15 +102,28 @@ export default function PhotoInput() {
             </motion.div>
           )}
 
-          {mode === "camera" && (
-            <CameraCaptureModal
-              onCapture={(src) => {
-                dispatch({ type: "ADD_PHOTO", photo: createPhoto(src) });
-                dispatch({ type: "SET_HAS_STARTED_EDITING", value: true });
-              }}
-              onClose={() => setMode("select")}
-            />
-          )}
+          {mode === "camera" && (() => {
+            const layout = getLayout(state.layout);
+            const targetCount = layout.photoCount;
+            return (
+              <CameraCaptureModal
+                mode="initial-multi"
+                targetCount={targetCount}
+                onCapture={(src, captureIndex) => {
+                  const photoItem = createPhoto(src);
+                  if (state.photos.length > captureIndex) {
+                    dispatch({ type: "REPLACE_PHOTO", index: captureIndex, photo: photoItem });
+                  } else {
+                    dispatch({ type: "ADD_PHOTO", photo: photoItem });
+                  }
+                }}
+                onClose={() => {
+                  dispatch({ type: "SET_HAS_STARTED_EDITING", value: true });
+                  setMode("select");
+                }}
+              />
+            );
+          })()}
 
           {mode === "upload" && (
             <UploadArea
