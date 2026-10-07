@@ -51,6 +51,9 @@ export interface EditorState {
   activeStickerId: string | null;
   activePhotoId: string | null;
   hasStartedEditing: boolean;
+  hasSelectedLayout: boolean;
+  hasReviewedPhotos: boolean;
+  isReviewingPhotos: boolean;
 }
 
 type Action =
@@ -82,6 +85,9 @@ type Action =
   | { type: "SET_ACTIVE_STICKER"; id: string | null }
   | { type: "SET_ACTIVE_PHOTO"; id: string | null }
   | { type: "SET_HAS_STARTED_EDITING"; value: boolean }
+  | { type: "SET_HAS_SELECTED_LAYOUT"; value: boolean }
+  | { type: "SET_HAS_REVIEWED_PHOTOS"; value: boolean }
+  | { type: "SET_IS_REVIEWING_PHOTOS"; value: boolean }
   | { type: "RESET" };
 
 const initialState: EditorState = {
@@ -106,6 +112,9 @@ const initialState: EditorState = {
   activeStickerId: null,
   activePhotoId: null,
   hasStartedEditing: false,
+  hasSelectedLayout: false,
+  hasReviewedPhotos: false,
+  isReviewingPhotos: false,
 };
 
 function reducer(state: EditorState, action: Action): EditorState {
@@ -168,6 +177,9 @@ function reducer(state: EditorState, action: Action): EditorState {
     case "SET_ACTIVE_STICKER": return { ...state, activeStickerId: action.id, ...(action.id ? { activePhotoId: null } : {}) };
     case "SET_ACTIVE_PHOTO": return { ...state, activePhotoId: action.id, ...(action.id ? { activeStickerId: null } : {}) };
     case "SET_HAS_STARTED_EDITING": return { ...state, hasStartedEditing: action.value };
+    case "SET_HAS_SELECTED_LAYOUT": return { ...state, hasSelectedLayout: action.value };
+    case "SET_HAS_REVIEWED_PHOTOS": return { ...state, hasReviewedPhotos: action.value };
+    case "SET_IS_REVIEWING_PHOTOS": return { ...state, isReviewingPhotos: action.value };
     case "RESET": {
       state.photos.forEach(p => { if (p.src.startsWith("blob:")) URL.revokeObjectURL(p.src) });
       return initialState;
@@ -184,7 +196,7 @@ const EditorContext = createContext<{
 export function EditorProvider({ children, initialLayout, initialBg }: { children: ReactNode; initialLayout?: LayoutType; initialBg?: string }) {
   const [state, dispatch] = useReducer(reducer, {
     ...initialState,
-    ...(initialLayout ? { layout: initialLayout } : {}),
+    ...(initialLayout ? { layout: initialLayout, hasSelectedLayout: true } : {}),
     ...(initialBg ? { bgColor: initialBg, frameColor: initialBg } : {}),
   });
   return (

@@ -4,45 +4,64 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { useEditor } from "@/stores/editor-store";
+import FrameLayoutSelector from "./FrameLayoutSelector";
 import PhotoInput from "./PhotoInput";
+import PhotoReview from "./PhotoReview";
 import PhotoCanvas from "./PhotoCanvas";
-import LayoutSelector from "./LayoutSelector";
 import FrameCustomizer from "./FrameCustomizer";
 import FilterPanel from "./FilterPanel";
 import TextEditor from "./TextEditor";
 import StickerSelector from "./StickerSelector";
 import PreviewModal from "./PreviewModal";
 
-type Tab = "layout" | "frame" | "filter" | "text" | "sticker";
+type Tab = "frame" | "filter" | "text" | "sticker";
 
 export default function EditorLayout() {
-  const { state } = useEditor();
-  const [tab, setTab] = useState<Tab>("layout");
+  const { state, dispatch } = useEditor();
+  const [tab, setTab] = useState<Tab>("frame");
   const [showPreview, setShowPreview] = useState(false);
 
-  const hasPhotos = state.photos.length > 0;
+  // Step 1: Layout not selected yet -> Frame Layout Selector
+  if (!state.hasSelectedLayout) {
+    return <FrameLayoutSelector />;
+  }
 
-  if (!hasPhotos && !state.hasStartedEditing) {
+  // Step 3: Photos input completed and in review mode -> Photo Review
+  if (state.isReviewingPhotos && state.photos.length > 0 && !state.hasReviewedPhotos && !state.hasStartedEditing) {
+    return <PhotoReview />;
+  }
+
+  // Step 2: Photo Input (taking or uploading photos)
+  if (!state.hasStartedEditing) {
     return <PhotoInput />;
   }
 
   const TABS: { key: Tab; label: string }[] = [
-    { key: "layout", label: "Layout" },
     { key: "frame", label: "Frame" },
     { key: "filter", label: "Filter" },
     { key: "text", label: "Text" },
     { key: "sticker", label: "Stickers" },
   ];
 
+  const handleBackToPreview = () => {
+    dispatch({ type: "SET_HAS_STARTED_EDITING", value: false });
+    dispatch({ type: "SET_IS_REVIEWING_PHOTOS", value: true });
+    dispatch({ type: "SET_HAS_REVIEWED_PHOTOS", value: false });
+  };
+
   return (
     <div className="min-h-screen bg-bg flex flex-col">
       {/* Header */}
       <header className="h-14 border-b border-border flex items-center justify-between px-4 md:px-6 bg-white/80 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-2 text-muted hover:text-text transition-colors">
+          <button
+            type="button"
+            onClick={handleBackToPreview}
+            className="flex items-center gap-2 text-muted hover:text-text transition-colors"
+          >
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm hidden sm:inline">Back</span>
-          </Link>
+          </button>
           <div className="w-px h-5 bg-border" />
           <div className="flex items-center gap-1.5">
             <span className="font-[family-name:var(--font-heading)] text-sm font-semibold">Abadibooth</span>
@@ -85,7 +104,6 @@ export default function EditorLayout() {
 
           {/* Tab content */}
           <div className="flex-1 overflow-y-auto p-5">
-            {tab === "layout" && <LayoutSelector />}
             {tab === "frame" && <FrameCustomizer />}
             {tab === "filter" && <FilterPanel />}
             {tab === "text" && <TextEditor />}

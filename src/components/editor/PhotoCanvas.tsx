@@ -5,7 +5,7 @@ import { getLayout, SlotRect } from "@/lib/layouts";
 import { getFilterCSS } from "@/lib/filters";
 import { motion, PanInfo, useMotionValue, useDragControls, AnimatePresence } from "framer-motion";
 import { useRef, useCallback, useEffect, useState } from "react";
-import { RotateCw, Trash2, Maximize2, ImagePlus, Camera, ZoomIn, ZoomOut, GripHorizontal } from "lucide-react";
+import { RotateCw, Trash2, Maximize2, ImagePlus, Camera, ZoomIn, ZoomOut } from "lucide-react";
 import { CameraCaptureModal } from "./CameraCaptureModal";
 import { createPhoto } from "@/stores/editor-store";
 
@@ -446,7 +446,19 @@ function PhotoSlot({
         outlineOffset: "2px",
         opacity: isDragging ? 0.4 : 1,
         touchAction: "none",
+        cursor: photo ? "grab" : "default",
       }}
+      draggable={Boolean(photo)}
+      onDragStart={(e) => {
+        if ((e.target as HTMLElement).closest(".slot-control") || (e.target as HTMLElement).closest("button")) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", `${index}`);
+        onDragStart(index);
+      }}
+      onDragEnd={onDragEnd}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -479,10 +491,10 @@ function PhotoSlot({
             draggable={false}
           />
 
-          {/* Selected Layer UI: Quick Floating In-Frame Controls for Zoom, Rotate & Reorder */}
+          {/* Selected Layer UI: Quick Floating In-Frame Controls for Zoom & Rotate */}
           {isSelected && (
             <div
-              className="slot-control absolute bottom-2 left-2 right-2 z-30 flex items-center justify-between gap-1 px-2 py-1.5 bg-black/75 backdrop-blur-md rounded-xl text-white shadow-lg pointer-events-auto"
+              className="slot-control absolute bottom-2 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-black/75 backdrop-blur-md rounded-xl text-white shadow-lg pointer-events-auto max-w-[95%]"
               onPointerDown={(e) => e.stopPropagation()}
             >
               <div className="flex items-center gap-1">
@@ -520,19 +532,6 @@ function PhotoSlot({
                 >
                   <RotateCw className="w-3.5 h-3.5" />
                 </button>
-                {/* Reorder drag handle */}
-                <div
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.effectAllowed = "move";
-                    onDragStart(index);
-                  }}
-                  onDragEnd={onDragEnd}
-                  className="p-1 hover:bg-white/20 rounded-md cursor-grab active:cursor-grabbing transition-colors"
-                  title="Seret untuk memindahkan ke slot lain"
-                >
-                  <GripHorizontal className="w-3.5 h-3.5 text-white/80" />
-                </div>
               </div>
             </div>
           )}
