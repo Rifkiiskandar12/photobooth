@@ -103,20 +103,52 @@ export async function renderCanvas(state: EditorState): Promise<HTMLCanvasElemen
       const img = await loadImage(photo.src);
       const filterCSS = getFilterCSS(photo.filter || state.globalFilter);
       ctx.filter = filterCSS === "none" ? "none" : filterCSS;
-      // object-fit: cover
+
+      // Apply per-photo adjustments (brightness / contrast / saturation)
+      const adjustments: string[] = [];
+      if (photo.brightness !== undefined && photo.brightness !== 100)
+        adjustments.push(`brightness(${photo.brightness / 100})`);
+      if (photo.contrast !== undefined && photo.contrast !== 100)
+        adjustments.push(`contrast(${photo.contrast / 100})`);
+      if (photo.saturation !== undefined && photo.saturation !== 100)
+        adjustments.push(`saturate(${photo.saturation / 100})`);
+      if (adjustments.length) {
+        ctx.filter = [filterCSS !== "none" ? filterCSS : "", ...adjustments].filter(Boolean).join(" ");
+      }
+
+      // object-fit: cover — base size
+      const zoom = photo.zoom ?? 1;
       const imgAspect = img.width / img.height;
       const slotAspect = sw / sh;
-      let dw: number, dh: number;
+      let baseW: number, baseH: number;
       if (imgAspect > slotAspect) {
-        dh = sh;
-        dw = dh * imgAspect;
+        baseH = sh * zoom;
+        baseW = baseH * imgAspect;
       } else {
-        dw = sw;
-        dh = dw / imgAspect;
+        baseW = sw * zoom;
+        baseH = baseW / imgAspect;
       }
-      const dx = sx + (sw - dw) / 2;
-      const dy = sy + (sh - dh) / 2;
-      ctx.drawImage(img, dx, dy, dw, dh);
+
+      // Centre + apply cropX/Y offsets (match CSS: scale(zoom) translate(cropX*100%, cropY*100%))
+      // CSS translate % is relative to the element's own size, applied in the pre-scale space,
+      // so visually the displacement is cropX * elementSize * zoom.
+      const cx = sx + sw / 2;
+      const cy = sy + sh / 2;
+
+      const offsetX = (photo.cropX ?? 0) * sw * zoom;
+      const offsetY = (photo.cropY ?? 0) * sh * zoom;
+
+      const rotation = photo.rotation ?? 0;
+
+      ctx.save();
+      // Translate to slot centre, apply rotation, then draw image centred there
+      ctx.translate(cx + offsetX, cy + offsetY);
+      if (rotation !== 0) {
+        ctx.rotate((rotation * Math.PI) / 180);
+      }
+      ctx.drawImage(img, -baseW / 2, -baseH / 2, baseW, baseH);
+      ctx.restore();
+
       ctx.filter = "none";
     } else {
       ctx.fillStyle = "#e5e5e5";

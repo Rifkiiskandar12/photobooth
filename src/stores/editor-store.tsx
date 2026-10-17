@@ -49,7 +49,11 @@ export interface EditorState {
   captionColor: string;
   stickers: StickerItem[];
   activeStickerId: string | null;
+  activePhotoId: string | null;
   hasStartedEditing: boolean;
+  hasSelectedLayout: boolean;
+  hasReviewedPhotos: boolean;
+  isReviewingPhotos: boolean;
 }
 
 type Action =
@@ -58,6 +62,7 @@ type Action =
   | { type: "REMOVE_PHOTO"; id: string }
   | { type: "UPDATE_PHOTO"; id: string; updates: Partial<PhotoItem> }
   | { type: "REPLACE_PHOTO"; index: number; photo: PhotoItem }
+  | { type: "SWAP_PHOTOS"; indexA: number; indexB: number }
   | { type: "SET_LAYOUT"; layout: LayoutType }
   | { type: "SET_FRAME_COLOR"; color: string }
   | { type: "SET_BORDER_THICKNESS"; value: number }
@@ -78,7 +83,11 @@ type Action =
   | { type: "UPDATE_STICKER"; id: string; updates: Partial<StickerItem> }
   | { type: "REMOVE_STICKER"; id: string }
   | { type: "SET_ACTIVE_STICKER"; id: string | null }
+  | { type: "SET_ACTIVE_PHOTO"; id: string | null }
   | { type: "SET_HAS_STARTED_EDITING"; value: boolean }
+  | { type: "SET_HAS_SELECTED_LAYOUT"; value: boolean }
+  | { type: "SET_HAS_REVIEWED_PHOTOS"; value: boolean }
+  | { type: "SET_IS_REVIEWING_PHOTOS"; value: boolean }
   | { type: "RESET" };
 
 const initialState: EditorState = {
@@ -101,7 +110,11 @@ const initialState: EditorState = {
   captionColor: "auto",
   stickers: [],
   activeStickerId: null,
+  activePhotoId: null,
   hasStartedEditing: false,
+  hasSelectedLayout: false,
+  hasReviewedPhotos: false,
+  isReviewingPhotos: false,
 };
 
 function reducer(state: EditorState, action: Action): EditorState {
@@ -113,7 +126,11 @@ function reducer(state: EditorState, action: Action): EditorState {
     case "REMOVE_PHOTO": {
       const pToRemove = state.photos.find(p => p.id === action.id);
       if (pToRemove && pToRemove.src.startsWith("blob:")) URL.revokeObjectURL(pToRemove.src);
-      return { ...state, photos: state.photos.filter((p) => p.id !== action.id) };
+      return { 
+        ...state, 
+        photos: state.photos.filter((p) => p.id !== action.id),
+        activePhotoId: state.activePhotoId === action.id ? null : state.activePhotoId,
+      };
     }
     case "UPDATE_PHOTO":
       return { ...state, photos: state.photos.map((p) => p.id === action.id ? { ...p, ...action.updates } : p) };
@@ -123,6 +140,18 @@ function reducer(state: EditorState, action: Action): EditorState {
         const oldPhoto = newPhotos[action.index];
         if (oldPhoto.src.startsWith("blob:")) URL.revokeObjectURL(oldPhoto.src);
         newPhotos[action.index] = action.photo;
+      }
+      return { ...state, photos: newPhotos };
+    }
+    case "SWAP_PHOTOS": {
+      const newPhotos = [...state.photos];
+      const { indexA, indexB } = action;
+      if (
+        indexA >= 0 && indexB >= 0 &&
+        indexA < newPhotos.length && indexB < newPhotos.length &&
+        indexA !== indexB
+      ) {
+        [newPhotos[indexA], newPhotos[indexB]] = [newPhotos[indexB], newPhotos[indexA]];
       }
       return { ...state, photos: newPhotos };
     }
@@ -145,8 +174,12 @@ function reducer(state: EditorState, action: Action): EditorState {
     case "ADD_STICKER": return { ...state, stickers: [...state.stickers, action.sticker], activeStickerId: action.sticker.id };
     case "UPDATE_STICKER": return { ...state, stickers: state.stickers.map((s) => s.id === action.id ? { ...s, ...action.updates } : s) };
     case "REMOVE_STICKER": return { ...state, stickers: state.stickers.filter((s) => s.id !== action.id), activeStickerId: state.activeStickerId === action.id ? null : state.activeStickerId };
-    case "SET_ACTIVE_STICKER": return { ...state, activeStickerId: action.id };
+    case "SET_ACTIVE_STICKER": return { ...state, activeStickerId: action.id, ...(action.id ? { activePhotoId: null } : {}) };
+    case "SET_ACTIVE_PHOTO": return { ...state, activePhotoId: action.id, ...(action.id ? { activeStickerId: null } : {}) };
     case "SET_HAS_STARTED_EDITING": return { ...state, hasStartedEditing: action.value };
+    case "SET_HAS_SELECTED_LAYOUT": return { ...state, hasSelectedLayout: action.value };
+    case "SET_HAS_REVIEWED_PHOTOS": return { ...state, hasReviewedPhotos: action.value };
+    case "SET_IS_REVIEWING_PHOTOS": return { ...state, isReviewingPhotos: action.value };
     case "RESET": {
       state.photos.forEach(p => { if (p.src.startsWith("blob:")) URL.revokeObjectURL(p.src) });
       return initialState;
@@ -163,7 +196,7 @@ const EditorContext = createContext<{
 export function EditorProvider({ children, initialLayout, initialBg }: { children: ReactNode; initialLayout?: LayoutType; initialBg?: string }) {
   const [state, dispatch] = useReducer(reducer, {
     ...initialState,
-    ...(initialLayout ? { layout: initialLayout } : {}),
+    ...(initialLayout ? { layout: initialLayout, hasSelectedLayout: true } : {}),
     ...(initialBg ? { bgColor: initialBg, frameColor: initialBg } : {}),
   });
   return (
